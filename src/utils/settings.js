@@ -10,6 +10,7 @@ const Settings = {
         STOCK_IP: 'stockIp',
         CROSSPOINT_IP: 'crosspointIp', // Re-using this key name is fine, but semantically it's now specific
         SETTINGS_PANEL_OPEN: 'settingsPanelOpen',
+        TARGET_FOLDER: 'targetFolder',
 
         // Legacy keys for migration
         LEGACY_USE_CROSSPOINT: 'useCrosspointFirmware',
@@ -18,7 +19,25 @@ const Settings = {
 
     DEFAULTS: {
         STOCK_IP: '192.168.3.3',
-        CROSSPOINT_IP: '192.168.4.1'
+        CROSSPOINT_IP: '192.168.4.1',
+        TARGET_FOLDER: 'send-to-x4'
+    },
+
+    /**
+     * Sanitize a folder name for use on the device filesystem
+     * @param {string} name
+     * @returns {string}
+     */
+    sanitizeFolderName(name) {
+        if (!name || typeof name !== 'string') {
+            return this.DEFAULTS.TARGET_FOLDER;
+        }
+        const cleaned = name
+            .replace(/[\/\\:*?"<>|]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .substring(0, 64);
+        return cleaned || this.DEFAULTS.TARGET_FOLDER;
     },
 
     /**
@@ -129,8 +148,38 @@ const Settings = {
     },
 
     /**
+     * Get destination folder name on the device
+     * @returns {Promise<string>}
+     */
+    async getTargetFolder() {
+        try {
+            const result = await browserAPI.storage.sync.get(this.KEYS.TARGET_FOLDER);
+            return this.sanitizeFolderName(result[this.KEYS.TARGET_FOLDER]);
+        } catch (error) {
+            console.error('[Settings] Error getting target folder:', error);
+            return this.DEFAULTS.TARGET_FOLDER;
+        }
+    },
+
+    /**
+     * Set destination folder name on the device
+     * @param {string} folderName
+     * @returns {Promise<void>}
+     */
+    async setTargetFolder(folderName) {
+        try {
+            const sanitized = this.sanitizeFolderName(folderName);
+            await browserAPI.storage.sync.set({ [this.KEYS.TARGET_FOLDER]: sanitized });
+            console.log('[Settings] Target folder updated:', sanitized);
+        } catch (error) {
+            console.error('[Settings] Error saving target folder:', error);
+            throw error;
+        }
+    },
+
+    /**
      * Get all settings
-     * @returns {Promise<{firmwareType: string, deviceIp: string, settingsPanelOpen: boolean}>}
+     * @returns {Promise<{firmwareType: string, deviceIp: string, settingsPanelOpen: boolean, targetFolder: string}>}
      */
     async getAll() {
         try {
@@ -148,17 +197,21 @@ const Settings = {
                 deviceIp = result[this.KEYS.STOCK_IP] || this.DEFAULTS.STOCK_IP;
             }
 
+            const folderResult = await browserAPI.storage.sync.get(this.KEYS.TARGET_FOLDER);
+
             return {
                 firmwareType,
                 deviceIp,
-                settingsPanelOpen: panelResult[this.KEYS.SETTINGS_PANEL_OPEN] || false
+                settingsPanelOpen: panelResult[this.KEYS.SETTINGS_PANEL_OPEN] || false,
+                targetFolder: this.sanitizeFolderName(folderResult[this.KEYS.TARGET_FOLDER])
             };
         } catch (error) {
             console.error('[Settings] Error getting all settings:', error);
             return {
                 firmwareType: 'stock',
                 deviceIp: '192.168.3.3',
-                settingsPanelOpen: false
+                settingsPanelOpen: false,
+                targetFolder: this.DEFAULTS.TARGET_FOLDER
             };
         }
     }

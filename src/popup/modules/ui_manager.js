@@ -26,8 +26,9 @@ export class UIManager {
             deviceFiles: document.getElementById('device-files'),
             fileCount: document.getElementById('file-count'),
             fileListItems: document.getElementById('file-list-items'),
-            fileListItems: document.getElementById('file-list-items'),
+            folderLabel: document.getElementById('folder-label'),
             firmwareTypeSelect: document.getElementById('firmware-type'),
+            targetFolderInput: document.getElementById('target-folder'),
             deviceIpContainer: document.getElementById('device-ip-container'),
             deviceIpInput: document.getElementById('device-ip'),
             connectBtn: document.getElementById('connect-btn'),
@@ -43,6 +44,7 @@ export class UIManager {
         if (handlers.onDownload) this.elements.downloadBtn.addEventListener('click', handlers.onDownload);
         if (handlers.onSettingsChange) this.elements.firmwareTypeSelect.addEventListener('change', handlers.onSettingsChange);
         if (handlers.onIpChange) this.elements.deviceIpInput.addEventListener('change', handlers.onIpChange);
+        if (handlers.onTargetFolderChange) this.elements.targetFolderInput.addEventListener('change', handlers.onTargetFolderChange);
         if (handlers.onConnect) this.elements.connectBtn.addEventListener('click', handlers.onConnect);
         if (handlers.onSettingsToggle) this.elements.settingsHeader.addEventListener('click', handlers.onSettingsToggle);
         if (handlers.onSortChange) this.elements.sortSelect.addEventListener('change', handlers.onSortChange);
@@ -152,6 +154,8 @@ export class UIManager {
     updateSettingsUI(settings) {
         this.elements.firmwareTypeSelect.value = settings.firmwareType;
         this.elements.deviceIpInput.value = settings.deviceIp;
+        this.elements.targetFolderInput.value = settings.targetFolder;
+        this.updateFolderLabel(settings.targetFolder);
         // Optional: Update placeholder based on firmware type (UX improvement)
         if (settings.firmwareType === 'crosspoint') {
             this.elements.deviceIpInput.placeholder = '192.168.4.1';
@@ -160,10 +164,17 @@ export class UIManager {
         }
     }
 
+    updateFolderLabel(folderName) {
+        if (this.elements.folderLabel) {
+            this.elements.folderLabel.textContent = `📁 ${folderName}/`;
+        }
+    }
+
     getSettingsFromUI() {
         return {
             firmwareType: this.elements.firmwareTypeSelect.value,
-            deviceIp: this.elements.deviceIpInput.value.trim()
+            deviceIp: this.elements.deviceIpInput.value.trim(),
+            targetFolder: this.elements.targetFolderInput.value.trim()
         };
     }
 

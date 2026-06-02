@@ -13,7 +13,7 @@ class PopupController {
         this.ui = new UIManager();
         this.fileManager = new FileManager();
         this.articleManager = new ArticleManager();
-        this.settings = { firmwareType: 'stock', deviceIp: '192.168.3.3', settingsPanelOpen: false };
+        this.settings = { firmwareType: 'stock', deviceIp: '192.168.3.3', settingsPanelOpen: false, targetFolder: 'send-to-x4' };
         this.currentSort = 'newest'; // Default sort
     }
 
@@ -27,6 +27,7 @@ class PopupController {
             onDownload: () => this.handleDownload(),
             onSettingsChange: (e) => this.handleSettingsChange(e),
             onIpChange: (e) => this.handleIpChange(e),
+            onTargetFolderChange: (e) => this.handleTargetFolderChange(e),
             onConnect: () => this.handleConnect(),
             onSettingsToggle: () => this.handleSettingsToggle(),
             onSortChange: (e) => this.handleSortChange(e)
@@ -63,6 +64,7 @@ class PopupController {
                 this.settings.firmwareType = allSettings.firmwareType;
                 this.settings.deviceIp = allSettings.deviceIp;
                 this.settings.settingsPanelOpen = allSettings.settingsPanelOpen;
+                this.settings.targetFolder = allSettings.targetFolder;
 
                 this.ui.updateSettingsUI(this.settings);
                 this.ui.setSettingsPanelState(this.settings.settingsPanelOpen);
@@ -158,6 +160,32 @@ class PopupController {
         console.log('[Popup Controller] IP saved:', newIp);
     }
 
+    async handleTargetFolderChange(event) {
+        const rawFolder = event.target.value.trim();
+        if (!rawFolder) {
+            event.target.value = this.settings.targetFolder;
+            return;
+        }
+
+        const sanitized = window.Settings
+            ? window.Settings.sanitizeFolderName(rawFolder)
+            : rawFolder;
+
+        this.settings.targetFolder = sanitized;
+        event.target.value = sanitized;
+        this.ui.updateFolderLabel(sanitized);
+
+        if (window.Settings) {
+            await window.Settings.setTargetFolder(sanitized);
+        }
+        console.log('[Popup Controller] Target folder saved:', sanitized);
+
+        if (!this.ui.elements.deviceConnected.classList.contains('hidden')) {
+            const files = await this.fileManager.loadFolderFiles(this.settings, this.currentSort);
+            this.ui.showFileList(files, (filename, li) => this.handleDelete(filename, li));
+        }
+    }
+
     async handleConnect() {
         // Force save current input value first
         const currentInput = this.ui.getSettingsFromUI().deviceIp;
@@ -212,6 +240,11 @@ class PopupController {
         const article = this.articleManager.articleData;
         if (!article) return;
 
+        const uiSettings = this.ui.getSettingsFromUI();
+        if (uiSettings.targetFolder && uiSettings.targetFolder !== this.settings.targetFolder) {
+            await this.handleTargetFolderChange({ target: { value: uiSettings.targetFolder } });
+        }
+
         this.ui.setSendButtonState('sending');
 
         try {
@@ -224,7 +257,8 @@ class PopupController {
                 },
                 settings: {
                     firmwareType: this.settings.firmwareType,
-                    deviceIp: this.settings.deviceIp
+                    deviceIp: this.settings.deviceIp,
+                    targetFolder: this.settings.targetFolder
                 }
             });
 

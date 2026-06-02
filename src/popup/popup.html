@@ -82,7 +82,7 @@
 
       <div id="device-files" class="file-list hidden">
         <div class="file-list-header">
-          <span>📁 send-to-x4/</span>
+          <span id="folder-label">📁 send-to-x4/</span>
           <span id="file-count" class="file-count">0 files</span>
         </div>
         <div class="file-controls">
@@ -127,6 +127,12 @@
               <span class="btn-icon">🔄</span>
             </button>
           </div>
+        </div>
+
+        <div class="settings-sub-option">
+          <label class="input-label" for="target-folder">Destination Folder</label>
+          <input type="text" id="target-folder" class="settings-input" placeholder="send-to-x4" value="send-to-x4">
+          <p class="hint">EPUBs are saved to this folder on your X4. Renaming does not move existing files.</p>
         </div>
       </div>
     </section>

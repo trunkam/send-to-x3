@@ -25,28 +25,30 @@ const CrossPointUpload = {
     get listEndpoint() { return `http://${this.ip}/api/files`; },
     get mkdirEndpoint() { return `http://${this.ip}/mkdir`; },
     get deleteEndpoint() { return `http://${this.ip}/delete`; },
-    TARGET_FOLDER: 'send-to-x4',
+    DEFAULT_TARGET_FOLDER: 'send-to-x4',
 
     /**
      * Upload EPUB to CrossPoint device
-     * Files are placed in /send-to-x4/ folder for organization
+     * Files are placed in the configured destination folder for organization
      * @param {ArrayBuffer} epubData - The EPUB file as ArrayBuffer
      * @param {string} filename - The filename to use
+     * @param {string} [targetFolder] - Destination folder name on the device
      * @returns {Promise<{success: boolean, error?: string}>}
      */
-    async uploadEpub(epubData, filename) {
+    async uploadEpub(epubData, filename, targetFolder) {
+        const folder = targetFolder || this.DEFAULT_TARGET_FOLDER;
         console.log('[CrossPoint Upload] Starting upload for:', filename);
         console.log('[CrossPoint Upload] File size:', epubData.byteLength, 'bytes');
 
         try {
             // Step 1: Ensure target folder exists
-            const folderReady = await this.ensureFolderExists(this.TARGET_FOLDER);
+            const folderReady = await this.ensureFolderExists(folder);
             if (!folderReady) {
                 console.warn('[CrossPoint Upload] Could not verify/create folder, uploading to root instead');
             }
 
             // Step 2: Determine upload path
-            const uploadPath = folderReady ? `/${this.TARGET_FOLDER}` : `/`;
+            const uploadPath = folderReady ? `/${folder}` : `/`;
 
             console.log('[CrossPoint Upload] Upload path:', uploadPath);
 

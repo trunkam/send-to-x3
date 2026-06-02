@@ -10,7 +10,10 @@ export class FileManager {
         this.X4_URL = 'http://192.168.3.3';
         this.X4_EDIT_URL = 'http://192.168.3.3/edit';
         this.X4_LIST_URL = 'http://192.168.3.3/list';
-        this.TARGET_FOLDER = 'send-to-x4';
+    }
+
+    getTargetFolder(settings) {
+        return settings?.targetFolder || 'send-to-x4';
     }
 
     /**
@@ -97,17 +100,18 @@ export class FileManager {
         try {
             const isCrosspoint = settings.firmwareType === 'crosspoint';
             const ip = settings.deviceIp;
+            const targetFolder = this.getTargetFolder(settings);
             const baseUrl = `http://${ip}`;
 
             let listUrl, epubFiles;
 
             if (isCrosspoint) {
-                listUrl = `${baseUrl}/api/files?path=/${this.TARGET_FOLDER}`;
+                listUrl = `${baseUrl}/api/files?path=/${targetFolder}`;
                 const response = await this.bgFetch(listUrl);
                 const files = await response.json();
                 epubFiles = files.filter(f => !f.isDirectory && f.name.endsWith('.epub'));
             } else {
-                listUrl = `${baseUrl}/list?dir=/${this.TARGET_FOLDER}/`;
+                listUrl = `${baseUrl}/list?dir=/${targetFolder}/`;
                 const response = await this.bgFetch(listUrl);
                 const files = await response.json();
                 epubFiles = files.filter(f => f.type === 'file' && f.name.endsWith('.epub'));
@@ -170,7 +174,8 @@ export class FileManager {
             console.log('[File Manager] Deleting file:', filename);
             const isCrosspoint = settings.firmwareType === 'crosspoint';
             const ip = settings.deviceIp;
-            const fullPath = `/${this.TARGET_FOLDER}/${filename}`;
+            const targetFolder = this.getTargetFolder(settings);
+            const fullPath = `/${targetFolder}/${filename}`;
 
             // Use URLSearchParams instead of FormData for message safety
             const params = new URLSearchParams();
@@ -214,11 +219,12 @@ export class FileManager {
     }
 
     findTargetFolder(files, settings) {
+        const targetFolder = this.getTargetFolder(settings);
         const isCrosspoint = settings.firmwareType === 'crosspoint';
         if (isCrosspoint) {
-            return files.find(f => f.isDirectory && f.name === this.TARGET_FOLDER);
+            return files.find(f => f.isDirectory && f.name === targetFolder);
         } else {
-            return files.find(f => f.type === 'dir' && f.name === this.TARGET_FOLDER);
+            return files.find(f => f.type === 'dir' && f.name === targetFolder);
         }
     }
 }
