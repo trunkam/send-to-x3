@@ -4,6 +4,31 @@
  */
 
 // EpubBuilder will use the JSZip global from jszip.min.js (loaded via manifest)
+// Keep all possible metadata before applying the filesystem byte limit below.
+const MAX_EPUB_SANITIZED_BASENAME_CHARS = 500;
+const MAX_EPUB_BASENAME_BYTES = 240;
+
+/**
+ * Limit a string by UTF-8 byte length without splitting a Unicode code point.
+ * Grapheme clusters can still be truncated. This leaves room for the .epub
+ * extension within common 255-byte filesystem filename limits.
+ */
+function truncateUtf8(text, maxBytes) {
+    const encoder = new TextEncoder();
+    let result = '';
+    let byteLength = 0;
+
+    for (const character of text) {
+        const characterBytes = encoder.encode(character).length;
+        if (byteLength + characterBytes > maxBytes) break;
+
+        result += character;
+        byteLength += characterBytes;
+    }
+
+    return result.trimEnd() || 'untitled';
+}
+
 const EpubBuilder = {
     /**
      * Generate EPUB blob from article data
@@ -110,7 +135,15 @@ const EpubBuilder = {
         const date = article.date || new Date().toISOString().split('T')[0];
         parts.push(date);
 
-        return parts.join(' - ') + '.epub';
+        // Sanitize the complete basename as a final safeguard. Metadata such as
+        // dates and source domains are external input too. Limit its encoded
+        // size, not its character count, because filenames are byte-limited.
+        const safeBasename = Sanitizer.sanitizeFilename(
+            parts.join(' - '),
+            MAX_EPUB_SANITIZED_BASENAME_CHARS
+        );
+        const basename = truncateUtf8(safeBasename, MAX_EPUB_BASENAME_BYTES);
+        return `${basename}.epub`;
     },
 
     /**
