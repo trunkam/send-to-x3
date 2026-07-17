@@ -155,6 +155,21 @@ export function extractArticle() {
         let textContent = '';
         let wordCount = 0;
 
+        // Browser download APIs require a filesystem-safe filename. Normalize
+        // common article date formats before they are incorporated into it.
+        const normalizeDate = (value) => {
+            if (!value) return null;
+
+            const dateText = String(value).trim();
+            const isoDate = dateText.match(/^\d{4}-\d{2}-\d{2}/);
+            if (isoDate) return isoDate[0];
+
+            const parsedDate = new Date(dateText);
+            return Number.isNaN(parsedDate.getTime())
+                ? null
+                : parsedDate.toISOString().split('T')[0];
+        };
+
         if (hasReadability) {
             // Use Readability
             const docClone = document.cloneNode(true);
@@ -171,12 +186,10 @@ export function extractArticle() {
                 // Try to get date
                 const dateEl = document.querySelector('meta[property="article:published_time"]') ||
                     document.querySelector('time[datetime]');
-                if (article.publishedTime) {
-                    date = article.publishedTime.split('T')[0];
-                } else if (dateEl) {
-                    const dt = dateEl.getAttribute('content') || dateEl.getAttribute('datetime');
-                    if (dt) date = dt.split('T')[0];
-                }
+                const extractedDate = article.publishedTime ||
+                    (dateEl && (dateEl.getAttribute('content') || dateEl.getAttribute('datetime')));
+                const normalizedDate = normalizeDate(extractedDate);
+                if (normalizedDate) date = normalizedDate;
 
                 // Get author from meta if not in article
                 if (!author) {
