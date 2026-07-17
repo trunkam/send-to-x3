@@ -110,7 +110,10 @@ const EpubBuilder = {
         const date = article.date || new Date().toISOString().split('T')[0];
         parts.push(date);
 
-        return parts.join(' - ') + '.epub';
+        // Sanitize the complete basename as a final safeguard. Metadata such as
+        // dates and source domains are external input too.
+        const basename = Sanitizer.sanitizeFilename(parts.join(' - '), 180);
+        return `${basename}.epub`;
     },
 
     /**
