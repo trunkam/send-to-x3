@@ -165,9 +165,14 @@ export function extractArticle() {
             if (isoDate) return isoDate[0];
 
             const parsedDate = new Date(dateText);
-            return Number.isNaN(parsedDate.getTime())
-                ? null
-                : parsedDate.toISOString().split('T')[0];
+            if (Number.isNaN(parsedDate.getTime())) return null;
+
+            // Use local calendar components so a date-only source does not
+            // shift to the previous or next day during UTC conversion.
+            const year = String(parsedDate.getFullYear()).padStart(4, '0');
+            const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+            const day = String(parsedDate.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
         };
 
         if (hasReadability) {
