@@ -241,7 +241,8 @@ export function extractArticle() {
             document.querySelector('time[datetime]');
         if (dateEl) {
             const dt = dateEl.getAttribute('content') || dateEl.getAttribute('datetime');
-            if (dt) date = dt.split('T')[0];
+            const normalizedDate = normalizeDate(dt);
+            if (normalizedDate) date = normalizedDate;
         }
 
         // Create simple HTML body
