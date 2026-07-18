@@ -1,6 +1,7 @@
 import { UIManager } from './ui_manager.js';
 import { FileManager } from './file_manager.js';
 import { ArticleManager } from './article_manager.js';
+import { addArticle, addFiles, listQueue, removeItem, updateItem, recoverInterruptedItems } from '../../queue/queue_store.js';
 
 // Cross-browser compatibility
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
@@ -15,6 +16,9 @@ class PopupController {
         this.articleManager = new ArticleManager();
         this.settings = { firmwareType: 'stock', deviceIp: '192.168.3.3', settingsPanelOpen: false };
         this.currentSort = 'newest'; // Default sort
+        this.queueItems = [];
+        this.sendingQueue = false;
+        this.stopQueueRequested = false;
     }
 
     async init() {
@@ -25,6 +29,11 @@ class PopupController {
         this.ui.setupListeners({
             onSend: () => this.handleSend(),
             onDownload: () => this.handleDownload(),
+            onQueueArticle: () => this.handleQueueArticle(),
+            onImportFiles: (event) => this.handleImportFiles(event),
+            onSendAll: () => this.handleSendAll(),
+            onStopQueue: () => { this.stopQueueRequested = true; this.ui.setQueueProgress('Stopping after the current transfer…'); },
+            onOrganizeByDate: (event) => this.handleOrganizeByDate(event),
             onSettingsChange: (e) => this.handleSettingsChange(e),
             onIpChange: (e) => this.handleIpChange(e),
             onConnect: () => this.handleConnect(),
@@ -50,9 +59,11 @@ class PopupController {
         });
 
         // Run checks in parallel
+        await recoverInterruptedItems();
         await Promise.all([
             this.checkArticle(),
-            this.checkDevice()
+            this.checkDevice(),
+            this.refreshQueue()
         ]);
     }
 
@@ -113,7 +124,7 @@ class PopupController {
 
             // Load files
             const files = await this.fileManager.loadFolderFiles(this.settings);
-            this.ui.showFileList(files, (filename, li) => this.handleDelete(filename, li));
+            this.ui.showFileList(files, (filename, li) => this.handleDelete(filename, li), this.fileManager.lastLoadError);
 
             if (force) this.ui.setConnectButtonState('success');
             return true;
@@ -184,7 +195,101 @@ class PopupController {
         }
     }
 
-    async handleDelete(filename, liElement) {
+    async handleOrganizeByDate(event) {
+        this.settings.organizeByDate = event.target.checked;
+        await window.Settings.setOrganizeByDate(this.settings.organizeByDate);
+    }
+
+    async refreshQueue() {
+        this.queueItems = await listQueue();
+        this.ui.showQueue(this.queueItems, {
+            sending: this.sendingQueue,
+            onSendItem: item => this.sendQueueItem(item),
+            onRemoveItem: item => this.handleRemoveQueueItem(item)
+        });
+    }
+
+    async handleQueueArticle() {
+        if (!this.articleManager.articleData) return;
+        try {
+            await addArticle(this.articleManager.articleData);
+            await this.refreshQueue();
+            this.ui.setQueueProgress('Article added to the local queue.');
+        } catch (error) {
+            this.ui.setQueueProgress(error.message);
+        }
+    }
+
+    async handleImportFiles(event) {
+        try {
+            const files = Array.from(event.target.files || []);
+            if (files.length) await addFiles(files);
+            await this.refreshQueue();
+            this.ui.setQueueProgress(files.length ? `${files.length} file${files.length === 1 ? '' : 's'} added to the queue.` : '');
+        } catch (error) {
+            this.ui.setQueueProgress(error.message);
+        } finally {
+            event.target.value = '';
+        }
+    }
+
+    async handleRemoveQueueItem(item) {
+        if (!confirm(`Remove "${item.displayName}" from the local queue?`)) return;
+        await removeItem(item.id);
+        await this.refreshQueue();
+    }
+
+    async handleSendAll() {
+        this.sendingQueue = true;
+        this.stopQueueRequested = false;
+        try {
+            for (const item of [...this.queueItems]) {
+                const result = await this.sendQueueItem(item, true);
+                if (!result.success && result.connectivityFailure) {
+                    this.ui.setQueueProgress('Connection to X4 was lost. Remaining items are still queued.');
+                    break;
+                }
+                if (this.stopQueueRequested) break;
+            }
+        } finally {
+            this.sendingQueue = false;
+            await this.refreshQueue();
+        }
+    }
+
+    async sendQueueItem(item, batch = false) {
+        if (this.sendingQueue && !batch) return;
+        if (!batch) this.sendingQueue = true;
+        const position = this.queueItems.findIndex(candidate => candidate.id === item.id) + 1;
+        const current = { ...item, status: 'sending', lastError: null, attempts: (item.attempts || 0) + 1, lastAttemptAt: new Date().toISOString() };
+        await updateItem(current);
+        await this.refreshQueue();
+        this.ui.setQueueProgress(`Sending ${position} of ${this.queueItems.length}: ${item.displayName}`);
+        try {
+            const targetDirectory = TransferUtils.destination('send-to-x4', this.settings.organizeByDate, item.contentDate || item.createdAt);
+            const response = await browserAPI.runtime.sendMessage({ type: 'X4_UPLOAD_QUEUE_ITEM', payload: { itemId: current.id, targetDirectory }, settings: { firmwareType: this.settings.firmwareType, deviceIp: this.settings.deviceIp } });
+            if (!response?.success) throw new Error(response?.error || 'Upload failed.');
+            await removeItem(item.id);
+            this.ui.setQueueProgress(`Sent: ${item.displayName}`);
+            await this.refreshQueue();
+            if (!batch) await this.checkDevice();
+            return { success: true, connectivityFailure: false };
+        } catch (error) {
+            const message = error.message || 'Upload failed.';
+            await updateItem({ ...current, status: 'failed', lastError: message });
+            this.ui.setQueueProgress(`Failed: ${message}`);
+            await this.refreshQueue();
+            return { success: false, connectivityFailure: TransferUtils.isConnectivityError(message) };
+        } finally {
+            if (!batch) {
+                this.sendingQueue = false;
+                await this.refreshQueue();
+            }
+        }
+    }
+
+    async handleDelete(file, liElement) {
+        const filename = typeof file === 'string' ? file : file.name;
         if (!confirm(`Delete "${filename}" from X4?`)) return;
 
         liElement.classList.add('deleting'); // UI optimistically? UIManager should handle this ideally but we passed liElement
@@ -192,7 +297,7 @@ class PopupController {
         // We can access properties on liElement directly since it's a DOM node passed back.
 
         try {
-            await this.fileManager.deleteFile(filename, this.settings);
+            await this.fileManager.deleteFile(file, this.settings);
             // On success, remove from UI
             liElement.remove();
 

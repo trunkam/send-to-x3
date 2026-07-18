@@ -39,6 +39,10 @@
             <span class="btn-icon">📥</span>
             <span class="btn-text">Download</span>
           </button>
+          <button id="queue-article-btn" class="send-btn secondary">
+            <span class="btn-icon">➕</span>
+            <span class="btn-text">Queue</span>
+          </button>
         </div>
       </div>
 
@@ -55,6 +59,21 @@
     </section>
 
     <!-- Divider -->
+    <div class="divider"></div>
+
+    <section id="queue-section" class="section">
+      <div class="section-header"><span class="section-icon">🗂️</span><span class="section-title">Transfer queue</span><span id="queue-count" class="file-count">0 items</span></div>
+      <p class="hint queue-hint">Add items while online, then keep this popup open while sending them on X4 WiFi.</p>
+      <div class="button-group queue-actions">
+        <label for="import-files" class="send-btn secondary"><span class="btn-icon">📂</span><span class="btn-text">Add files</span></label>
+        <input id="import-files" type="file" accept=".epub,.txt,.xtc" multiple class="hidden">
+        <button id="send-all-btn" class="send-btn primary"><span class="btn-icon">📤</span><span class="btn-text">Send all</span></button>
+        <button id="stop-queue-btn" class="send-btn secondary hidden"><span class="btn-icon">⏹</span><span class="btn-text">Stop</span></button>
+      </div>
+      <div id="queue-progress" class="hint hidden"></div>
+      <ul id="queue-items" class="file-items queue-items"></ul>
+    </section>
+
     <div class="divider"></div>
 
     <!-- Device Section -->
@@ -128,16 +147,18 @@
             </button>
           </div>
         </div>
+        <label class="settings-sub-option checkbox-option"><input type="checkbox" id="organize-by-date"> Organize new uploads by date</label>
       </div>
     </section>
 
     <!-- Footer -->
     <footer class="popup-footer">
-      <a href="https://github.com/Xatpy/send-to-x4" target="_blank" class="footer-link">v1.1.1</a>
+      <a href="https://github.com/Xatpy/send-to-x4" target="_blank" class="footer-link">v1.2.1</a>
     </footer>
   </div>
 
   <script src="../utils/settings.js"></script>
+  <script src="../utils/transfer_utils.js"></script>
   <script type="module" src="modules/main.js"></script>
 </body>
 

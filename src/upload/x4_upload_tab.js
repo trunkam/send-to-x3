@@ -27,25 +27,29 @@ const X4UploadTab = {
      * @returns {Promise<{success: boolean, error?: string}>}
      */
     async uploadEpub(epubData, filename) {
+        return this.uploadFile({ data: epubData, filename, mimeType: 'application/epub+zip', targetDirectory: this.TARGET_FOLDER });
+    },
+
+    async uploadFile({ data, filename, mimeType, targetDirectory }) {
         console.log('[X4 Upload] Starting upload for:', filename);
-        console.log('[X4 Upload] File size:', epubData.byteLength, 'bytes');
 
         try {
             // Step 1: Ensure target folder exists
-            const folderReady = await this.ensureFolderExists(this.TARGET_FOLDER);
+            const safeFilename = TransferUtils.safeFilename(filename);
+            const safeDirectory = TransferUtils.safeDirectory(targetDirectory);
+            const folderReady = await this.ensureDirectory(safeDirectory);
             if (!folderReady) {
-                console.warn('[X4 Upload] Could not verify/create folder, uploading to root instead');
+                return { success: false, error: `Could not create /${safeDirectory} on X4` };
             }
 
             // Step 2: Determine upload path
-            const uploadPath = folderReady
-                ? `/${this.TARGET_FOLDER}/${filename}`
-                : `/${filename}`;
+            const resolvedFilename = await this.resolveCollision(safeDirectory, safeFilename);
+            const uploadPath = `/${safeDirectory}/${resolvedFilename}`;
 
             console.log('[X4 Upload] Upload path:', uploadPath);
 
             // Step 3: Upload the file
-            return await this.uploadFile(epubData, uploadPath);
+            return await this.uploadRawFile(data, uploadPath, mimeType || TransferUtils.mimeTypeFor(safeFilename));
 
         } catch (error) {
             console.error('[X4 Upload] Error:', error);
@@ -59,23 +63,22 @@ const X4UploadTab = {
      * @returns {Promise<boolean>} - True if folder exists or was created
      */
     async ensureFolderExists(folderName) {
+        return this.ensureDirectory(folderName);
+    },
+
+    async ensureDirectory(directory) {
         try {
-            // Check if folder exists
-            console.log('[X4 Upload] Checking if folder exists:', folderName);
-            const exists = await this.folderExists(folderName);
-
-            if (exists) {
-                console.log('[X4 Upload] Folder already exists');
-                return true;
+            let current = '';
+            for (const segment of TransferUtils.safeDirectory(directory).split('/')) {
+                const parent = current;
+                current = current ? `${current}/${segment}` : segment;
+                if (!await this.folderExists(segment, parent) && !await this.createFolder(current)) return false;
             }
-
-            // Create folder
-            console.log('[X4 Upload] Creating folder:', folderName);
-            return await this.createFolder(folderName);
+            return true;
 
         } catch (error) {
             console.error('[X4 Upload] Error checking/creating folder:', error);
-            return false; // Continue with root upload
+            return false;
         }
     },
 
@@ -84,9 +87,10 @@ const X4UploadTab = {
      * @param {string} folderName 
      * @returns {Promise<boolean>}
      */
-    async folderExists(folderName) {
+    async folderExists(folderName, parent = '') {
         try {
-            const response = await fetch(`${this.LIST_ENDPOINT}?dir=/`, {
+            const directory = parent ? `/${parent}/` : '/';
+            const response = await fetch(`${this.LIST_ENDPOINT}?dir=${encodeURIComponent(directory)}`, {
                 method: 'GET'
             });
 
@@ -109,6 +113,23 @@ const X4UploadTab = {
             console.error('[X4 Upload] Error listing directory:', error);
             return false;
         }
+    },
+
+    async listDirectory(directory) {
+        const response = await fetch(`${this.LIST_ENDPOINT}?dir=${encodeURIComponent('/' + TransferUtils.safeDirectory(directory) + '/')}`);
+        if (!response.ok) return [];
+        const items = await response.json();
+        return Array.isArray(items) ? items : [];
+    },
+
+    async resolveCollision(directory, filename) {
+        // Stock's API supplies the cumulative directory path in the multipart filename.
+        // CrossPoint instead receives the basename and parent directory separately.
+        const names = new Set((await this.listDirectory(directory)).filter(item => item.type !== 'dir').map(item => item.name));
+        let attempt = 0;
+        let candidate = filename;
+        while (names.has(candidate)) candidate = TransferUtils.collisionFilename(filename, ++attempt);
+        return candidate;
     },
 
     /**
@@ -149,13 +170,13 @@ const X4UploadTab = {
      * @param {string} path - Full path including filename (e.g., /send-to-x4/file.epub)
      * @returns {Promise<{success: boolean, error?: string}>}
      */
-    async uploadFile(data, path) {
+    async uploadRawFile(data, path, mimeType = 'application/octet-stream') {
         try {
-            const blob = new Blob([data], { type: 'application/epub+zip' });
+            const blob = new Blob([data], { type: mimeType });
             const formData = new FormData();
 
             // The filename in FormData includes the path
-            const file = new File([blob], path, { type: 'application/epub+zip' });
+            const file = new File([blob], path, { type: mimeType });
             formData.append('data', file, path);
 
             console.log('[X4 Upload] Sending POST to', this.UPLOAD_ENDPOINT);

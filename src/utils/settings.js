@@ -10,6 +10,7 @@ const Settings = {
         STOCK_IP: 'stockIp',
         CROSSPOINT_IP: 'crosspointIp', // Re-using this key name is fine, but semantically it's now specific
         SETTINGS_PANEL_OPEN: 'settingsPanelOpen',
+        ORGANIZE_BY_DATE: 'organizeByDate',
 
         // Legacy keys for migration
         LEGACY_USE_CROSSPOINT: 'useCrosspointFirmware',
@@ -128,6 +129,10 @@ const Settings = {
         }
     },
 
+    async setOrganizeByDate(enabled) {
+        await browserAPI.storage.sync.set({ [this.KEYS.ORGANIZE_BY_DATE]: !!enabled });
+    },
+
     /**
      * Get all settings
      * @returns {Promise<{firmwareType: string, deviceIp: string, settingsPanelOpen: boolean}>}
@@ -140,7 +145,7 @@ const Settings = {
             let deviceIp;
             const keys = [this.KEYS.STOCK_IP, this.KEYS.CROSSPOINT_IP];
             const result = await browserAPI.storage.sync.get(keys);
-            const panelResult = await browserAPI.storage.sync.get(this.KEYS.SETTINGS_PANEL_OPEN);
+            const panelResult = await browserAPI.storage.sync.get([this.KEYS.SETTINGS_PANEL_OPEN, this.KEYS.ORGANIZE_BY_DATE]);
 
             if (firmwareType === 'crosspoint') {
                 deviceIp = result[this.KEYS.CROSSPOINT_IP] || this.DEFAULTS.CROSSPOINT_IP;
@@ -151,14 +156,16 @@ const Settings = {
             return {
                 firmwareType,
                 deviceIp,
-                settingsPanelOpen: panelResult[this.KEYS.SETTINGS_PANEL_OPEN] || false
+                settingsPanelOpen: panelResult[this.KEYS.SETTINGS_PANEL_OPEN] || false,
+                organizeByDate: panelResult[this.KEYS.ORGANIZE_BY_DATE] || false
             };
         } catch (error) {
             console.error('[Settings] Error getting all settings:', error);
             return {
                 firmwareType: 'stock',
                 deviceIp: '192.168.3.3',
-                settingsPanelOpen: false
+                settingsPanelOpen: false,
+                organizeByDate: false
             };
         }
     }

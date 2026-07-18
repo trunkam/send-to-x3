@@ -408,6 +408,15 @@ body {
     content: '';
 }
 
+.queue-hint { margin: -4px 0 10px; }
+.queue-actions { margin-bottom: 10px; }
+.queue-items { max-height: 180px; }
+.queue-details { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.queue-meta { color: #71717a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-btn { background: #3f3f46; border: 0; border-radius: 4px; color: #e4e4e7; cursor: pointer; font-size: 11px; padding: 4px 7px; }
+.queue-btn:disabled { opacity: .5; }
+.checkbox-option { color: #a1a1aa; cursor: pointer; display: block; font-size: 12px; }
+
 /* Settings Section */
 .section-header.clickable {
     cursor: pointer;

@@ -18,6 +18,7 @@ if (typeof importScripts === 'function') {
             '../epub/jszip.min.js',
             '../utils/logger.js',
             '../utils/sanitize.js',
+            '../utils/transfer_utils.js',
             '../epub/epub_templates.js',
             '../epub/epub_builder.js',
             '../upload/x4_upload_tab.js',
@@ -50,6 +51,11 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 success: false,
                 error: error.message
             }));
+        return true;
+    }
+
+    if (message.type === 'X4_UPLOAD_QUEUE_ITEM') {
+        handleUploadQueueItem(message, sendResponse);
         return true;
     }
 
@@ -289,6 +295,54 @@ async function handleSendArticle(messageData, sender, sendResponse) {
             error: error.message
         });
     }
+}
+
+/** Queue uploads intentionally do not download a fallback file on failure. */
+async function handleUploadQueueItem(messageData, sendResponse) {
+    try {
+        const { itemId, targetDirectory, filename } = messageData.payload;
+        const item = await readQueuedItem(itemId);
+        if (!item) throw new Error('This queue item is no longer available locally.');
+        const settings = messageData.settings || {};
+        const isCrosspoint = settings.firmwareType === 'crosspoint';
+        const uploader = isCrosspoint ? CrossPointUpload : X4UploadTab;
+        const deviceIp = settings.deviceIp || (isCrosspoint ? '192.168.4.1' : '192.168.3.3');
+        uploader.setIp(deviceIp);
+        let data;
+        let name = filename || item.filename;
+        let mimeType = item.mimeType;
+        if (item.kind === 'article') {
+            const epub = await EpubBuilder.build(item.article);
+            data = await EpubBuilder.blobToArrayBuffer(epub);
+            name = filename || EpubBuilder.generateFilename(item.article);
+            mimeType = 'application/epub+zip';
+        } else {
+            data = await item.blob.arrayBuffer();
+        }
+        const result = await uploader.uploadFile({ data, filename: name, mimeType, targetDirectory });
+        sendResponse(result);
+    } catch (error) {
+        sendResponse({ success: false, error: error.message || 'Transfer failed.' });
+    }
+}
+
+/**
+ * Runtime messages are JSON-serialized in Chrome, so a queued Blob cannot be
+ * passed from the popup to this worker. Read it from the shared extension
+ * IndexedDB database instead.
+ */
+function readQueuedItem(id) {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open('send-to-x4-transfer-queue', 1);
+        request.onerror = () => reject(request.error || new Error('Could not read the local transfer queue.'));
+        request.onsuccess = () => {
+            const db = request.result;
+            const transaction = db.transaction('items', 'readonly');
+            const getRequest = transaction.objectStore('items').get(id);
+            getRequest.onsuccess = () => { db.close(); resolve(getRequest.result || null); };
+            getRequest.onerror = () => { db.close(); reject(getRequest.error || new Error('Could not read the queued item.')); };
+        };
+    });
 }
 
 /**

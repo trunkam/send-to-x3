@@ -2,7 +2,7 @@
 
 A browser extension to send long-form articles from the web directly to your **Xteink X4** e-ink reader as clean EPUB files.
 
-> Status: **Stable (v1.1.1)** — Tested with Xteink X4
+> Status: **Stable (v1.2.1)** — Tested with Xteink X4
 >
 > Supports: **Chrome** • **Firefox** • **Edge**
 
@@ -39,6 +39,9 @@ It is designed for people who:
   - 💾 **Offline-first & local** — No accounts, no servers, no tracking
   - 📥 **EPUB download fallback** — Keep a local copy if needed
   - 🗂️ **Advanced File Management** — View, sort, and delete files directly on the device
+  - 🗂️ **Transfer Queue** — Save article snapshots and compatible local files while online, then send them together after joining X4 WiFi
+  - 📦 **Local File Transfer** — Send existing `.epub`, `.txt`, and `.xtc` files unchanged
+  - 📅 **Optional Date Folders** — Keep future uploads in daily subfolders under `send-to-x4/`
   
   ---
   
@@ -94,6 +97,14 @@ It is designed for people who:
   2. ✅ Switch to the X4 WiFi hotspot  
   3. ✅ Open the popup and send  
   4. ❌ Do not refresh the page while connected to the X4 hotspot
+
+### Transfer Queue
+
+Use **Queue** while browsing on normal internet WiFi. The extension stores a local article snapshot, so it does not need to re-fetch the source after you connect to the X4 hotspot. You can also add existing EPUB, TXT, and XTC files with **Add files**; imported files are transferred unchanged.
+
+When ready, join the X4 WiFi and click **Send all**. Keep the popup open during a batch transfer. Failed items remain in the local queue and can be retried; queued uploads never fall back to a browser download.
+
+Enable **Organize new uploads by date** in Settings to place new files in `send-to-x4/YYYY-MM-DD/`. It is off by default and existing flat files remain untouched.
   
   ---
   
