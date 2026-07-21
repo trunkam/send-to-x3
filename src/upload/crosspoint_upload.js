@@ -36,9 +36,15 @@ const CrossPointUpload = {
      * @returns {Promise<{success: boolean, error?: string}>}
      */
     async uploadEpub(epubData, filename, targetFolder) {
-        const folder = targetFolder || this.DEFAULT_TARGET_FOLDER;
+        // Re-validate in upload path — do not trust popup-supplied values
+        const folder = (typeof globalThis.FolderPath !== 'undefined')
+            ? globalThis.FolderPath.sanitize(targetFolder, this.DEFAULT_TARGET_FOLDER)
+            : (typeof Settings !== 'undefined'
+                ? Settings.sanitizeFolderName(targetFolder)
+                : (targetFolder || this.DEFAULT_TARGET_FOLDER));
         console.log('[CrossPoint Upload] Starting upload for:', filename);
         console.log('[CrossPoint Upload] File size:', epubData.byteLength, 'bytes');
+        console.log('[CrossPoint Upload] Target folder:', folder);
 
         try {
             // Step 1: Ensure target folder exists
@@ -48,7 +54,11 @@ const CrossPointUpload = {
             }
 
             // Step 2: Determine upload path
-            const uploadPath = folderReady ? `/${folder}` : `/`;
+            const uploadPath = folderReady
+                ? ((typeof globalThis.FolderPath !== 'undefined')
+                    ? globalThis.FolderPath.dirPath(folder)
+                    : `/${folder}`)
+                : `/`;
 
             console.log('[CrossPoint Upload] Upload path:', uploadPath);
 
@@ -89,7 +99,9 @@ const CrossPointUpload = {
 
     async folderExists(folderName) {
         try {
-            const response = await fetch(`${this.listEndpoint}?path=/`, {
+            const listUrl = new URL(this.listEndpoint);
+            listUrl.searchParams.set('path', '/');
+            const response = await fetch(listUrl.toString(), {
                 method: 'GET'
             });
 
@@ -163,8 +175,9 @@ const CrossPointUpload = {
             const file = new File([blob], filename, { type: 'application/epub+zip' });
             formData.append('file', file);
 
-            // Add query parameter for path
-            const uploadUrl = `${this.uploadEndpoint}?path=${encodeURIComponent(path)}`;
+            // Add query parameter for path via URLSearchParams (safe encoding)
+            const uploadUrl = new URL(this.uploadEndpoint);
+            uploadUrl.searchParams.set('path', path);
 
             // Create timeout controller (30s)
             const controller = new AbortController();
@@ -173,7 +186,7 @@ const CrossPointUpload = {
             console.log('[CrossPoint Upload] Sending POST with 30s timeout...');
 
             try {
-                const response = await fetch(uploadUrl, {
+                const response = await fetch(uploadUrl.toString(), {
                     method: 'POST',
                     body: formData,
                     signal: controller.signal

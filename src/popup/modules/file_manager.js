@@ -13,7 +13,15 @@ export class FileManager {
     }
 
     getTargetFolder(settings) {
-        return settings?.targetFolder || 'send-to-x4';
+        const raw = settings?.targetFolder || 'send-to-x4';
+        const api = globalThis.FolderPath || globalThis.Settings;
+        if (api?.sanitize) {
+            return api.sanitize(raw);
+        }
+        if (api?.sanitizeFolderName) {
+            return api.sanitizeFolderName(raw);
+        }
+        return raw;
     }
 
     /**
@@ -60,16 +68,13 @@ export class FileManager {
         try {
             const isCrosspoint = settings.firmwareType === 'crosspoint';
             const ip = settings.deviceIp;
+            const firmwareType = isCrosspoint ? 'crosspoint' : 'stock';
 
-            // Construct URL based on firmware type
-            const baseUrl = `http://${ip}`;
-
-            // CrossPoint uses /api/files, Stock uses /list
-            const listUrl = isCrosspoint
-                ? `${baseUrl}/api/files`
-                : `${baseUrl}/list`;
-
-            const listPath = isCrosspoint ? `${listUrl}?path=/` : `${listUrl}?dir=/`;
+            const listPath = globalThis.FolderPath
+                ? globalThis.FolderPath.rootListUrl(ip, firmwareType)
+                : (isCrosspoint
+                    ? `http://${ip}/api/files?path=/`
+                    : `http://${ip}/list?dir=/`);
 
             console.log('[File Manager] Checking device:', { type: settings.firmwareType, ip, url: listPath });
 
@@ -101,19 +106,27 @@ export class FileManager {
             const isCrosspoint = settings.firmwareType === 'crosspoint';
             const ip = settings.deviceIp;
             const targetFolder = this.getTargetFolder(settings);
-            const baseUrl = `http://${ip}`;
+            const firmwareType = isCrosspoint ? 'crosspoint' : 'stock';
 
-            let listUrl, epubFiles;
+            const listUrl = globalThis.FolderPath
+                ? globalThis.FolderPath.listUrl(ip, firmwareType, targetFolder)
+                : (() => {
+                    const url = new URL(isCrosspoint ? `http://${ip}/api/files` : `http://${ip}/list`);
+                    if (isCrosspoint) {
+                        url.searchParams.set('path', `/${targetFolder}`);
+                    } else {
+                        url.searchParams.set('dir', `/${targetFolder}/`);
+                    }
+                    return url.toString();
+                })();
+
+            let epubFiles;
+            const response = await this.bgFetch(listUrl);
+            const files = await response.json();
 
             if (isCrosspoint) {
-                listUrl = `${baseUrl}/api/files?path=/${targetFolder}`;
-                const response = await this.bgFetch(listUrl);
-                const files = await response.json();
                 epubFiles = files.filter(f => !f.isDirectory && f.name.endsWith('.epub'));
             } else {
-                listUrl = `${baseUrl}/list?dir=/${targetFolder}/`;
-                const response = await this.bgFetch(listUrl);
-                const files = await response.json();
                 epubFiles = files.filter(f => f.type === 'file' && f.name.endsWith('.epub'));
             }
 
@@ -175,7 +188,9 @@ export class FileManager {
             const isCrosspoint = settings.firmwareType === 'crosspoint';
             const ip = settings.deviceIp;
             const targetFolder = this.getTargetFolder(settings);
-            const fullPath = `/${targetFolder}/${filename}`;
+            const fullPath = globalThis.FolderPath
+                ? globalThis.FolderPath.filePath(targetFolder, filename)
+                : `/${targetFolder}/${filename}`;
 
             // Use URLSearchParams instead of FormData for message safety
             const params = new URLSearchParams();

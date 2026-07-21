@@ -24,20 +24,32 @@ const Settings = {
     },
 
     /**
-     * Sanitize a folder name for use on the device filesystem
+     * Sanitize a folder name for use on the device filesystem.
+     * Delegates to FolderPath (single safe path segment; rejects . / .. and URL-breaking chars).
      * @param {string} name
      * @returns {string}
      */
     sanitizeFolderName(name) {
+        if (typeof globalThis.FolderPath !== 'undefined') {
+            return globalThis.FolderPath.sanitize(name, this.DEFAULTS.TARGET_FOLDER);
+        }
+        // Fallback if FolderPath script is missing (should not happen in production)
         if (!name || typeof name !== 'string') {
             return this.DEFAULTS.TARGET_FOLDER;
         }
-        const cleaned = name
-            .replace(/[\/\\:*?"<>|]/g, '')
+        const trimmed = name.trim();
+        if (!trimmed || trimmed === '.' || trimmed === '..' || /[\/\\]/.test(trimmed)) {
+            return this.DEFAULTS.TARGET_FOLDER;
+        }
+        const cleaned = trimmed
+            .replace(/[:*?"<>|#&?%\x00-\x1f]/g, '')
             .replace(/\s+/g, ' ')
             .trim()
             .substring(0, 64);
-        return cleaned || this.DEFAULTS.TARGET_FOLDER;
+        if (!cleaned || cleaned === '.' || cleaned === '..') {
+            return this.DEFAULTS.TARGET_FOLDER;
+        }
+        return cleaned;
     },
 
     /**

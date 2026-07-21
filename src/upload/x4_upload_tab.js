@@ -28,9 +28,15 @@ const X4UploadTab = {
      * @returns {Promise<{success: boolean, error?: string}>}
      */
     async uploadEpub(epubData, filename, targetFolder) {
-        const folder = targetFolder || this.DEFAULT_TARGET_FOLDER;
+        // Re-validate in upload path — do not trust popup-supplied values
+        const folder = (typeof globalThis.FolderPath !== 'undefined')
+            ? globalThis.FolderPath.sanitize(targetFolder, this.DEFAULT_TARGET_FOLDER)
+            : (typeof Settings !== 'undefined'
+                ? Settings.sanitizeFolderName(targetFolder)
+                : (targetFolder || this.DEFAULT_TARGET_FOLDER));
         console.log('[X4 Upload] Starting upload for:', filename);
         console.log('[X4 Upload] File size:', epubData.byteLength, 'bytes');
+        console.log('[X4 Upload] Target folder:', folder);
 
         try {
             // Step 1: Ensure target folder exists
@@ -41,7 +47,9 @@ const X4UploadTab = {
 
             // Step 2: Determine upload path
             const uploadPath = folderReady
-                ? `/${folder}/${filename}`
+                ? ((typeof globalThis.FolderPath !== 'undefined')
+                    ? globalThis.FolderPath.filePath(folder, filename)
+                    : `/${folder}/${filename}`)
                 : `/${filename}`;
 
             console.log('[X4 Upload] Upload path:', uploadPath);
@@ -88,7 +96,9 @@ const X4UploadTab = {
      */
     async folderExists(folderName) {
         try {
-            const response = await fetch(`${this.LIST_ENDPOINT}?dir=/`, {
+            const listUrl = new URL(this.LIST_ENDPOINT);
+            listUrl.searchParams.set('dir', '/');
+            const response = await fetch(listUrl.toString(), {
                 method: 'GET'
             });
 
@@ -121,7 +131,10 @@ const X4UploadTab = {
     async createFolder(folderName) {
         try {
             const formData = new FormData();
-            formData.append('path', `/${folderName}/`);
+            const folderPath = (typeof globalThis.FolderPath !== 'undefined')
+                ? globalThis.FolderPath.dirPath(folderName, { trailingSlash: true })
+                : `/${folderName}/`;
+            formData.append('path', folderPath);
 
             const response = await fetch(this.UPLOAD_ENDPOINT, {
                 method: 'PUT',

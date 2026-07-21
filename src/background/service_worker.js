@@ -18,6 +18,7 @@ if (typeof importScripts === 'function') {
             '../epub/jszip.min.js',
             '../utils/logger.js',
             '../utils/sanitize.js',
+            '../utils/folder_path.js',
             '../epub/epub_templates.js',
             '../epub/epub_builder.js',
             '../upload/x4_upload_tab.js',
@@ -238,8 +239,14 @@ async function handleSendArticle(messageData, sender, sendResponse) {
         // Step 2: Choose uploader based on settings
         const isCrosspoint = settings.firmwareType === 'crosspoint';
         const deviceIp = settings.deviceIp || (isCrosspoint ? '192.168.4.1' : '192.168.3.3');
-        const targetFolder = settings.targetFolder
+        // Re-sanitize here — do not trust the popup-supplied folder value
+        const rawFolder = settings.targetFolder
             || (typeof Settings !== 'undefined' ? await Settings.getTargetFolder() : 'send-to-x4');
+        const targetFolder = (typeof globalThis.FolderPath !== 'undefined')
+            ? globalThis.FolderPath.sanitize(rawFolder)
+            : (typeof Settings !== 'undefined'
+                ? Settings.sanitizeFolderName(rawFolder)
+                : rawFolder);
 
         const uploader = isCrosspoint ? CrossPointUpload : X4UploadTab;
         const apiName = isCrosspoint ? 'CrossPoint' : 'standard X4';
