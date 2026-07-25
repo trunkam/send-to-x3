@@ -17,29 +17,39 @@ const X4UploadTab = {
 
     get UPLOAD_ENDPOINT() { return `http://${this.ip}/edit`; },
     get LIST_ENDPOINT() { return `http://${this.ip}/list`; },
-    TARGET_FOLDER: 'send-to-x4',
+    DEFAULT_TARGET_FOLDER: 'send-to-x4',
 
     /**
      * Upload EPUB to X4 via direct HTTP POST
-     * Files are placed in /send-to-x4/ folder for organization
+     * Files are placed in the configured destination folder for organization
      * @param {ArrayBuffer} epubData - The EPUB file as ArrayBuffer
      * @param {string} filename - The filename to use
+     * @param {string} [targetFolder] - Destination folder name on the device
      * @returns {Promise<{success: boolean, error?: string}>}
      */
-    async uploadEpub(epubData, filename) {
+    async uploadEpub(epubData, filename, targetFolder) {
+        // Re-validate in upload path — do not trust popup-supplied values
+        const folder = (typeof globalThis.FolderPath !== 'undefined')
+            ? globalThis.FolderPath.sanitize(targetFolder, this.DEFAULT_TARGET_FOLDER)
+            : (typeof Settings !== 'undefined'
+                ? Settings.sanitizeFolderName(targetFolder)
+                : (targetFolder || this.DEFAULT_TARGET_FOLDER));
         console.log('[X4 Upload] Starting upload for:', filename);
         console.log('[X4 Upload] File size:', epubData.byteLength, 'bytes');
+        console.log('[X4 Upload] Target folder:', folder);
 
         try {
             // Step 1: Ensure target folder exists
-            const folderReady = await this.ensureFolderExists(this.TARGET_FOLDER);
+            const folderReady = await this.ensureFolderExists(folder);
             if (!folderReady) {
                 console.warn('[X4 Upload] Could not verify/create folder, uploading to root instead');
             }
 
             // Step 2: Determine upload path
             const uploadPath = folderReady
-                ? `/${this.TARGET_FOLDER}/${filename}`
+                ? ((typeof globalThis.FolderPath !== 'undefined')
+                    ? globalThis.FolderPath.filePath(folder, filename)
+                    : `/${folder}/${filename}`)
                 : `/${filename}`;
 
             console.log('[X4 Upload] Upload path:', uploadPath);
@@ -86,7 +96,9 @@ const X4UploadTab = {
      */
     async folderExists(folderName) {
         try {
-            const response = await fetch(`${this.LIST_ENDPOINT}?dir=/`, {
+            const listUrl = new URL(this.LIST_ENDPOINT);
+            listUrl.searchParams.set('dir', '/');
+            const response = await fetch(listUrl.toString(), {
                 method: 'GET'
             });
 
@@ -119,7 +131,10 @@ const X4UploadTab = {
     async createFolder(folderName) {
         try {
             const formData = new FormData();
-            formData.append('path', `/${folderName}/`);
+            const folderPath = (typeof globalThis.FolderPath !== 'undefined')
+                ? globalThis.FolderPath.dirPath(folderName, { trailingSlash: true })
+                : `/${folderName}/`;
+            formData.append('path', folderPath);
 
             const response = await fetch(this.UPLOAD_ENDPOINT, {
                 method: 'PUT',
