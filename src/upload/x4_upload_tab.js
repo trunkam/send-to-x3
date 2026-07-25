@@ -17,26 +17,30 @@ const X4UploadTab = {
 
     get UPLOAD_ENDPOINT() { return `http://${this.ip}/edit`; },
     get LIST_ENDPOINT() { return `http://${this.ip}/list`; },
-    TARGET_FOLDER: 'send-to-x4',
+    DEFAULT_TARGET_FOLDER: 'send-to-x4',
 
     /**
      * Upload EPUB to X4 via direct HTTP POST
-     * Files are placed in /send-to-x4/ folder for organization
+     * Files are placed in the configured destination folder for organization
      * @param {ArrayBuffer} epubData - The EPUB file as ArrayBuffer
      * @param {string} filename - The filename to use
+     * @param {string} [targetFolder] - Destination folder name on the device
      * @returns {Promise<{success: boolean, error?: string}>}
      */
-    async uploadEpub(epubData, filename) {
-        return this.uploadFile({ data: epubData, filename, mimeType: 'application/epub+zip', targetDirectory: this.TARGET_FOLDER });
+    async uploadEpub(epubData, filename, targetFolder) {
+        return this.uploadFile({
+            data: epubData,
+            filename,
+            mimeType: 'application/epub+zip',
+            targetDirectory: targetFolder || this.DEFAULT_TARGET_FOLDER
+        });
     },
 
     async uploadFile({ data, filename, mimeType, targetDirectory }) {
         console.log('[X4 Upload] Starting upload for:', filename);
-
         try {
-            // Step 1: Ensure target folder exists
             const safeFilename = TransferUtils.safeFilename(filename);
-            const safeDirectory = TransferUtils.safeDirectory(targetDirectory);
+            const safeDirectory = TransferUtils.safeDirectory(targetDirectory || this.DEFAULT_TARGET_FOLDER);
             const folderReady = await this.ensureDirectory(safeDirectory);
             if (!folderReady) {
                 return { success: false, error: `Could not create /${safeDirectory} on X4` };
@@ -90,7 +94,9 @@ const X4UploadTab = {
     async folderExists(folderName, parent = '') {
         try {
             const directory = parent ? `/${parent}/` : '/';
-            const response = await fetch(`${this.LIST_ENDPOINT}?dir=${encodeURIComponent(directory)}`, {
+            const listUrl = new URL(this.LIST_ENDPOINT);
+            listUrl.searchParams.set('dir', directory);
+            const response = await fetch(listUrl.toString(), {
                 method: 'GET'
             });
 
@@ -140,7 +146,8 @@ const X4UploadTab = {
     async createFolder(folderName) {
         try {
             const formData = new FormData();
-            formData.append('path', `/${folderName}/`);
+            const folderPath = `/${TransferUtils.safeDirectory(folderName)}/`;
+            formData.append('path', folderPath);
 
             const response = await fetch(this.UPLOAD_ENDPOINT, {
                 method: 'PUT',

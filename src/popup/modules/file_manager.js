@@ -14,7 +14,18 @@ export class FileManager {
         this.X4_URL = 'http://192.168.3.3';
         this.X4_EDIT_URL = 'http://192.168.3.3/edit';
         this.X4_LIST_URL = 'http://192.168.3.3/list';
-        this.TARGET_FOLDER = 'send-to-x4';
+    }
+
+    getTargetFolder(settings) {
+        const raw = settings?.targetFolder || 'send-to-x4';
+        const api = globalThis.FolderPath || globalThis.Settings;
+        if (api?.sanitize) {
+            return api.sanitize(raw);
+        }
+        if (api?.sanitizeFolderName) {
+            return api.sanitizeFolderName(raw);
+        }
+        return raw;
     }
 
     /**
@@ -61,16 +72,13 @@ export class FileManager {
         try {
             const isCrosspoint = settings.firmwareType === 'crosspoint';
             const ip = settings.deviceIp;
+            const firmwareType = isCrosspoint ? 'crosspoint' : 'stock';
 
-            // Construct URL based on firmware type
-            const baseUrl = `http://${ip}`;
-
-            // CrossPoint uses /api/files, Stock uses /list
-            const listUrl = isCrosspoint
-                ? `${baseUrl}/api/files`
-                : `${baseUrl}/list`;
-
-            const listPath = isCrosspoint ? `${listUrl}?path=/` : `${listUrl}?dir=/`;
+            const listPath = globalThis.FolderPath
+                ? globalThis.FolderPath.rootListUrl(ip, firmwareType)
+                : (isCrosspoint
+                    ? `http://${ip}/api/files?path=/`
+                    : `http://${ip}/list?dir=/`);
 
             console.log('[File Manager] Checking device:', { type: settings.firmwareType, ip, url: listPath });
 
@@ -102,23 +110,23 @@ export class FileManager {
         try {
             const isCrosspoint = settings.firmwareType === 'crosspoint';
             const ip = settings.deviceIp;
-            const baseUrl = `http://${ip}`;
-
+            const targetFolder = this.getTargetFolder(settings);
             const allowed = new Set(['.epub', '.txt', '.xtc']);
-            const pending = [this.TARGET_FOLDER];
+            const pending = [targetFolder];
             const visited = new Set();
             let epubFiles = [];
             while (pending.length) {
                 if (visited.size >= MAX_SCANNED_DIRECTORIES) {
-                    const error = new Error(`Stopped after scanning ${MAX_SCANNED_DIRECTORIES} folders under ${this.TARGET_FOLDER}.`);
+                    const error = new Error(`Stopped after scanning ${MAX_SCANNED_DIRECTORIES} folders under ${targetFolder}.`);
                     error.code = 'SCAN_LIMIT';
                     throw error;
                 }
                 const folder = pending.shift();
                 if (visited.has(folder)) continue;
                 visited.add(folder);
-                const listUrl = isCrosspoint ? `${baseUrl}/api/files?path=${encodeURIComponent('/' + folder)}` : `${baseUrl}/list?dir=${encodeURIComponent('/' + folder + '/')}`;
-                const response = await this.bgFetch(listUrl);
+                const listUrl = new URL(isCrosspoint ? `http://${ip}/api/files` : `http://${ip}/list`);
+                listUrl.searchParams.set(isCrosspoint ? 'path' : 'dir', isCrosspoint ? `/${folder}` : `/${folder}/`);
+                const response = await this.bgFetch(listUrl.toString());
                 const files = await response.json();
                 if (!Array.isArray(files)) continue;
                 for (const file of files) {
@@ -187,7 +195,8 @@ export class FileManager {
             const filename = TransferUtils.safeFilename(typeof file === 'string' ? file : file.name);
             const isCrosspoint = settings.firmwareType === 'crosspoint';
             const ip = settings.deviceIp;
-            const folder = TransferUtils.safeDirectory(typeof file === 'string' ? this.TARGET_FOLDER : file.folder);
+            const targetFolder = this.getTargetFolder(settings);
+            const folder = TransferUtils.safeDirectory(typeof file === 'string' ? targetFolder : file.folder);
             const fullPath = `/${folder}/${filename}`;
 
             // Use URLSearchParams instead of FormData for message safety
@@ -232,11 +241,12 @@ export class FileManager {
     }
 
     findTargetFolder(files, settings) {
+        const targetFolder = this.getTargetFolder(settings);
         const isCrosspoint = settings.firmwareType === 'crosspoint';
         if (isCrosspoint) {
-            return files.find(f => f.isDirectory && f.name === this.TARGET_FOLDER);
+            return files.find(f => f.isDirectory && f.name === targetFolder);
         } else {
-            return files.find(f => f.type === 'dir' && f.name === this.TARGET_FOLDER);
+            return files.find(f => f.type === 'dir' && f.name === targetFolder);
         }
     }
 }

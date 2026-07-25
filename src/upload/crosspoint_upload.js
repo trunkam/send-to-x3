@@ -25,26 +25,30 @@ const CrossPointUpload = {
     get listEndpoint() { return `http://${this.ip}/api/files`; },
     get mkdirEndpoint() { return `http://${this.ip}/mkdir`; },
     get deleteEndpoint() { return `http://${this.ip}/delete`; },
-    TARGET_FOLDER: 'send-to-x4',
+    DEFAULT_TARGET_FOLDER: 'send-to-x4',
 
     /**
      * Upload EPUB to CrossPoint device
-     * Files are placed in /send-to-x4/ folder for organization
+     * Files are placed in the configured destination folder for organization
      * @param {ArrayBuffer} epubData - The EPUB file as ArrayBuffer
      * @param {string} filename - The filename to use
+     * @param {string} [targetFolder] - Destination folder name on the device
      * @returns {Promise<{success: boolean, error?: string}>}
      */
-    async uploadEpub(epubData, filename) {
-        return this.uploadFile({ data: epubData, filename, mimeType: 'application/epub+zip', targetDirectory: this.TARGET_FOLDER });
+    async uploadEpub(epubData, filename, targetFolder) {
+        return this.uploadFile({
+            data: epubData,
+            filename,
+            mimeType: 'application/epub+zip',
+            targetDirectory: targetFolder || this.DEFAULT_TARGET_FOLDER
+        });
     },
 
     async uploadFile({ data, filename, mimeType, targetDirectory }) {
         console.log('[CrossPoint Upload] Starting upload for:', filename);
-
         try {
-            // Step 1: Ensure target folder exists
             const safeFilename = TransferUtils.safeFilename(filename);
-            const safeDirectory = TransferUtils.safeDirectory(targetDirectory);
+            const safeDirectory = TransferUtils.safeDirectory(targetDirectory || this.DEFAULT_TARGET_FOLDER);
             const folderReady = await this.ensureDirectory(safeDirectory);
             if (!folderReady) {
                 return { success: false, error: `Could not create /${safeDirectory} on CrossPoint` };
@@ -93,7 +97,9 @@ const CrossPointUpload = {
     async folderExists(folderName, parent = '') {
         try {
             const directory = parent ? `/${parent}` : '/';
-            const response = await fetch(`${this.listEndpoint}?path=${encodeURIComponent(directory)}`, {
+            const listUrl = new URL(this.listEndpoint);
+            listUrl.searchParams.set('path', directory);
+            const response = await fetch(listUrl.toString(), {
                 method: 'GET'
             });
 
@@ -184,8 +190,9 @@ const CrossPointUpload = {
             const file = new File([blob], filename, { type: mimeType });
             formData.append('file', file);
 
-            // Add query parameter for path
-            const uploadUrl = `${this.uploadEndpoint}?path=${encodeURIComponent(path)}`;
+            // Add query parameter for path via URLSearchParams (safe encoding)
+            const uploadUrl = new URL(this.uploadEndpoint);
+            uploadUrl.searchParams.set('path', path);
 
             // Create timeout controller (30s)
             const controller = new AbortController();
@@ -194,7 +201,7 @@ const CrossPointUpload = {
             console.log('[CrossPoint Upload] Sending POST with 30s timeout...');
 
             try {
-                const response = await fetch(uploadUrl, {
+                const response = await fetch(uploadUrl.toString(), {
                     method: 'POST',
                     body: formData,
                     signal: controller.signal
