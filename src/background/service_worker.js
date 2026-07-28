@@ -3,15 +3,8 @@
  * Handles EPUB generation, X4 upload, and download fallback
  */
 
-// Cross-browser compatibility
-// Cross-browser compatibility
-// browserAPI is defined in settings.js, which is loaded before this script in manifest.json
-// const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
-
-// Import required modules (paths relative to service worker location in src/background/)
-// Import required modules
-// Note: In Firefox 'scripts' (Background Page), these are loaded via manifest.json.
-// In Chrome 'service_worker', importScripts works and is required.
+// `background.scripts` is a Manifest V2 field. Load the worker's dependencies
+// explicitly so the same Manifest V3 package works in Chrome and Firefox.
 if (typeof importScripts === 'function') {
     try {
         importScripts(
