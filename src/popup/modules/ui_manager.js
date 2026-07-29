@@ -5,6 +5,8 @@
 export class UIManager {
     constructor() {
         this.elements = {};
+        this.deviceConnected = false;
+        this.sendInProgress = false;
         this.cacheElements();
     }
 
@@ -20,9 +22,19 @@ export class UIManager {
             errorMessage: document.getElementById('error-message'),
             sendBtn: document.getElementById('send-btn'),
             downloadBtn: document.getElementById('download-btn'),
+            queueArticleBtn: document.getElementById('queue-article-btn'),
+            importFiles: document.getElementById('import-files'),
+            sendAllBtn: document.getElementById('send-all-btn'),
+            stopQueueBtn: document.getElementById('stop-queue-btn'),
+            queueCount: document.getElementById('queue-count'),
+            queueItems: document.getElementById('queue-items'),
+            queueProgress: document.getElementById('queue-progress'),
+            organizeByDate: document.getElementById('organize-by-date'),
             deviceLoading: document.getElementById('device-loading'),
             deviceConnected: document.getElementById('device-connected'),
+            deviceConnectedLabel: document.getElementById('device-connected-label'),
             deviceDisconnected: document.getElementById('device-disconnected'),
+            deviceRefreshBtn: document.getElementById('device-refresh-btn'),
             deviceFiles: document.getElementById('device-files'),
             fileCount: document.getElementById('file-count'),
             fileListItems: document.getElementById('file-list-items'),
@@ -42,10 +54,16 @@ export class UIManager {
     setupListeners(handlers) {
         if (handlers.onSend) this.elements.sendBtn.addEventListener('click', handlers.onSend);
         if (handlers.onDownload) this.elements.downloadBtn.addEventListener('click', handlers.onDownload);
+        if (handlers.onQueueArticle) this.elements.queueArticleBtn.addEventListener('click', handlers.onQueueArticle);
+        if (handlers.onImportFiles) this.elements.importFiles.addEventListener('change', handlers.onImportFiles);
+        if (handlers.onSendAll) this.elements.sendAllBtn.addEventListener('click', handlers.onSendAll);
+        if (handlers.onStopQueue) this.elements.stopQueueBtn.addEventListener('click', handlers.onStopQueue);
+        if (handlers.onOrganizeByDate) this.elements.organizeByDate.addEventListener('change', handlers.onOrganizeByDate);
         if (handlers.onSettingsChange) this.elements.firmwareTypeSelect.addEventListener('change', handlers.onSettingsChange);
         if (handlers.onIpChange) this.elements.deviceIpInput.addEventListener('change', handlers.onIpChange);
         if (handlers.onTargetFolderChange) this.elements.targetFolderInput.addEventListener('change', handlers.onTargetFolderChange);
         if (handlers.onConnect) this.elements.connectBtn.addEventListener('click', handlers.onConnect);
+        if (handlers.onRefreshDevice) this.elements.deviceRefreshBtn.addEventListener('click', handlers.onRefreshDevice);
         if (handlers.onSettingsToggle) this.elements.settingsHeader.addEventListener('click', handlers.onSettingsToggle);
         if (handlers.onSortChange) this.elements.sortSelect.addEventListener('change', handlers.onSortChange);
     }
@@ -98,10 +116,8 @@ export class UIManager {
         this.elements.deviceConnected.classList.remove('hidden');
 
         // Update the displayed IP address
-        const ipDisplay = this.elements.deviceConnected.querySelector('span:last-child');
-        if (ipDisplay) {
-            ipDisplay.textContent = `Connected to ${ip}`;
-        }
+        this.elements.deviceConnectedLabel.textContent = `Connected to ${ip}`;
+        this.setSendAvailability(true);
     }
 
     showDeviceDisconnected() {
@@ -109,34 +125,41 @@ export class UIManager {
         this.elements.deviceConnected.classList.add('hidden');
         this.elements.deviceFiles.classList.add('hidden');
         this.elements.deviceDisconnected.classList.remove('hidden');
+        this.setSendAvailability(false);
     }
 
-    showFileList(files, onDelete) {
+    setSendAvailability(connected) {
+        this.deviceConnected = connected;
+        this.elements.sendBtn.disabled = !connected || this.sendInProgress;
+    }
+
+    setDeviceRefreshState(refreshing) {
+        const btn = this.elements.deviceRefreshBtn;
+        btn.disabled = refreshing;
+        btn.innerHTML = refreshing ? '<span class="btn-spinner"></span>' : '↻';
+    }
+
+    showFileList(files, onDelete, errorMessage = null) {
         this.elements.deviceFiles.classList.remove('hidden');
         this.elements.fileCount.textContent = `${files.length} file${files.length !== 1 ? 's' : ''}`;
 
         if (files.length === 0) {
-            this.elements.fileListItems.innerHTML = '<li class="empty"><span class="file-name">No files yet</span></li>';
+            const item = document.createElement('li');
+            item.className = 'empty';
+            const message = document.createElement('span');
+            message.className = 'file-name';
+            message.textContent = errorMessage || 'No files yet';
+            item.append(message);
+            this.elements.fileListItems.replaceChildren(item);
         } else {
             // No slicing - show all files (CSS handles scroll)
-            this.elements.fileListItems.innerHTML = files
-                .map(f => {
-                    const escapedName = f.name.replace(/"/g, '&quot;');
-                    return `<li data-filename="${escapedName}">
-                    <span class="file-name" title="${escapedName}">${f.name}</span>
-                    <button class="delete-btn" title="Delete file">🗑️</button>
-                </li>`;
-                })
-                .join('');
-
-            // Add click handlers for delete buttons
-            this.elements.fileListItems.querySelectorAll('.delete-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const li = btn.closest('li');
-                    const filename = li.dataset.filename;
-                    onDelete(filename, li);
-                });
+            this.elements.fileListItems.replaceChildren();
+            files.forEach(file => {
+                const li = document.createElement('li');
+                const name = document.createElement('span'); name.className = 'file-name'; name.title = file.folder ? `${file.folder}/${file.name}` : file.name; name.textContent = file.folder ? `${file.folder}/${file.name}` : file.name;
+                const remove = document.createElement('button'); remove.className = 'delete-btn'; remove.title = 'Delete file'; remove.textContent = '🗑️';
+                remove.addEventListener('click', e => { e.stopPropagation(); onDelete(file, li); });
+                li.append(name, remove); this.elements.fileListItems.append(li);
             });
         }
     }
@@ -147,6 +170,31 @@ export class UIManager {
         this.elements.fileListItems.innerHTML = '<li class="empty"><span class="file-name">No files yet</span></li>';
     }
 
+    showQueue(items, handlers = {}) {
+        const total = items.reduce((sum, item) => sum + (item.size || 0), 0);
+        this.elements.queueCount.textContent = `${items.length} item${items.length === 1 ? '' : 's'} · ${this.formatBytes(total)}`;
+        this.elements.sendAllBtn.disabled = items.length === 0 || !!handlers.sending;
+        this.elements.stopQueueBtn.classList.toggle('hidden', !handlers.sending);
+        this.elements.queueItems.replaceChildren();
+        if (!items.length) {
+            const empty = document.createElement('li'); empty.className = 'empty'; empty.textContent = 'No queued transfers yet'; this.elements.queueItems.append(empty); return;
+        }
+        for (const item of items) {
+            const row = document.createElement('li');
+            const name = document.createElement('span'); name.className = 'file-name'; name.textContent = item.displayName;
+            const status = item.status === 'failed' ? this.truncateQueueError(item.lastError) : item.status;
+            const meta = document.createElement('small'); meta.className = 'queue-meta'; meta.textContent = `${item.kind === 'article' ? 'Article' : item.filename} · ${status}`;
+            const details = document.createElement('div'); details.className = 'queue-details'; details.append(name, meta);
+            const send = document.createElement('button'); send.className = 'queue-btn'; send.textContent = item.status === 'failed' ? 'Retry' : 'Send'; send.disabled = !!handlers.sending; send.addEventListener('click', () => handlers.onSendItem?.(item));
+            const remove = document.createElement('button'); remove.className = 'delete-btn'; remove.textContent = '🗑️'; remove.disabled = !!handlers.sending; remove.addEventListener('click', () => handlers.onRemoveItem?.(item));
+            row.append(details, send, remove); this.elements.queueItems.append(row);
+        }
+    }
+
+    setQueueProgress(message = '') { this.elements.queueProgress.textContent = message; this.elements.queueProgress.classList.toggle('hidden', !message); }
+    formatBytes(bytes) { return bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`; }
+    truncateQueueError(error) { const value = String(error || 'Upload failed.'); return value.length > 96 ? `${value.slice(0, 93)}…` : value; }
+
     // --- Settings UI ---
 
     // --- Settings UI ---
@@ -154,6 +202,7 @@ export class UIManager {
     updateSettingsUI(settings) {
         this.elements.firmwareTypeSelect.value = settings.firmwareType;
         this.elements.deviceIpInput.value = settings.deviceIp;
+        this.elements.organizeByDate.checked = !!settings.organizeByDate;
         this.elements.targetFolderInput.value = settings.targetFolder;
         this.updateFolderLabel(settings.targetFolder);
         // Optional: Update placeholder based on firmware type (UX improvement)
@@ -219,13 +268,15 @@ export class UIManager {
 
         switch (state) {
             case 'sending':
+                this.sendInProgress = true;
                 btn.disabled = true;
                 iconSpan.innerHTML = '<div class="btn-spinner"></div>';
                 textSpan.textContent = 'Sending...';
                 break;
 
             case 'success':
-                btn.disabled = false;
+                this.sendInProgress = false;
+                btn.disabled = !this.deviceConnected;
                 btn.classList.add('success');
                 iconSpan.textContent = '✅';
                 textSpan.textContent = message || 'Sent!';
@@ -233,7 +284,8 @@ export class UIManager {
                 break;
 
             case 'error':
-                btn.disabled = false;
+                this.sendInProgress = false;
+                btn.disabled = !this.deviceConnected;
                 btn.classList.add('error');
                 iconSpan.textContent = '❌';
                 textSpan.textContent = message || 'Failed';
@@ -241,7 +293,8 @@ export class UIManager {
                 break;
 
             default:
-                btn.disabled = false;
+                this.sendInProgress = false;
+                btn.disabled = !this.deviceConnected;
                 iconSpan.textContent = '📖';
                 textSpan.textContent = 'Send to X4';
                 break;

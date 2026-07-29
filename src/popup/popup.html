@@ -31,13 +31,17 @@
           <span id="article-words" class="meta-words">— words</span>
         </div>
         <div class="button-group">
-          <button id="send-btn" class="send-btn primary">
+          <button id="send-btn" class="send-btn primary" disabled>
             <span class="btn-icon">📖</span>
             <span class="btn-text">Send to X4</span>
           </button>
           <button id="download-btn" class="send-btn secondary">
             <span class="btn-icon">📥</span>
             <span class="btn-text">Download</span>
+          </button>
+          <button id="queue-article-btn" class="send-btn secondary">
+            <span class="btn-icon">➕</span>
+            <span class="btn-text">Queue</span>
           </button>
         </div>
       </div>
@@ -57,6 +61,21 @@
     <!-- Divider -->
     <div class="divider"></div>
 
+    <section id="queue-section" class="section">
+      <div class="section-header"><span class="section-icon">🗂️</span><span class="section-title">Transfer queue</span><span id="queue-count" class="file-count">0 items</span></div>
+      <p class="hint queue-hint">Add items while online, then keep this popup open while sending them on X4 WiFi.</p>
+      <div class="button-group queue-actions">
+        <label for="import-files" class="send-btn secondary"><span class="btn-icon">📂</span><span class="btn-text">Add files</span></label>
+        <input id="import-files" type="file" accept=".epub,.txt,.xtc" multiple class="hidden">
+        <button id="send-all-btn" class="send-btn primary"><span class="btn-icon">📤</span><span class="btn-text">Send all</span></button>
+        <button id="stop-queue-btn" class="send-btn secondary hidden"><span class="btn-icon">⏹</span><span class="btn-text">Stop</span></button>
+      </div>
+      <div id="queue-progress" class="hint hidden"></div>
+      <ul id="queue-items" class="file-items queue-items"></ul>
+    </section>
+
+    <div class="divider"></div>
+
     <!-- Device Section -->
     <section id="device-section" class="section">
       <div class="section-header">
@@ -71,7 +90,8 @@
 
       <div id="device-connected" class="device-status hidden">
         <div class="status-indicator connected"></div>
-        <span>Connected to 192.168.3.3</span>
+        <span id="device-connected-label">Connected to 192.168.3.3</span>
+        <button id="device-refresh-btn" class="device-refresh-btn" type="button" title="Refresh device status" aria-label="Refresh device status">↻</button>
       </div>
 
       <div id="device-disconnected" class="device-status hidden">
@@ -128,6 +148,7 @@
             </button>
           </div>
         </div>
+        <label class="settings-sub-option checkbox-option"><input type="checkbox" id="organize-by-date"> Organize new uploads by date</label>
 
         <div class="settings-sub-option">
           <label class="input-label" for="target-folder">Destination Folder</label>
@@ -139,12 +160,13 @@
 
     <!-- Footer -->
     <footer class="popup-footer">
-      <a href="https://github.com/Xatpy/send-to-x4" target="_blank" class="footer-link">v1.2.0</a>
+      <a href="https://github.com/Xatpy/send-to-x4" target="_blank" class="footer-link">v1.2.3</a>
     </footer>
   </div>
 
   <script src="../utils/folder_path.js"></script>
   <script src="../utils/settings.js"></script>
+  <script src="../utils/transfer_utils.js"></script>
   <script type="module" src="modules/main.js"></script>
 </body>
 

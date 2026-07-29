@@ -10,6 +10,7 @@ const Settings = {
         STOCK_IP: 'stockIp',
         CROSSPOINT_IP: 'crosspointIp', // Re-using this key name is fine, but semantically it's now specific
         SETTINGS_PANEL_OPEN: 'settingsPanelOpen',
+        ORGANIZE_BY_DATE: 'organizeByDate',
         TARGET_FOLDER: 'targetFolder',
 
         // Legacy keys for migration
@@ -159,6 +160,10 @@ const Settings = {
         }
     },
 
+    async setOrganizeByDate(enabled) {
+        await browserAPI.storage.sync.set({ [this.KEYS.ORGANIZE_BY_DATE]: !!enabled });
+    },
+
     /**
      * Get destination folder name on the device
      * @returns {Promise<string>}
@@ -191,7 +196,7 @@ const Settings = {
 
     /**
      * Get all settings
-     * @returns {Promise<{firmwareType: string, deviceIp: string, settingsPanelOpen: boolean, targetFolder: string}>}
+     * @returns {Promise<{firmwareType: string, deviceIp: string, settingsPanelOpen: boolean, organizeByDate: boolean, targetFolder: string}>}
      */
     async getAll() {
         try {
@@ -201,7 +206,7 @@ const Settings = {
             let deviceIp;
             const keys = [this.KEYS.STOCK_IP, this.KEYS.CROSSPOINT_IP];
             const result = await browserAPI.storage.sync.get(keys);
-            const panelResult = await browserAPI.storage.sync.get(this.KEYS.SETTINGS_PANEL_OPEN);
+            const panelResult = await browserAPI.storage.sync.get([this.KEYS.SETTINGS_PANEL_OPEN, this.KEYS.ORGANIZE_BY_DATE]);
 
             if (firmwareType === 'crosspoint') {
                 deviceIp = result[this.KEYS.CROSSPOINT_IP] || this.DEFAULTS.CROSSPOINT_IP;
@@ -215,6 +220,7 @@ const Settings = {
                 firmwareType,
                 deviceIp,
                 settingsPanelOpen: panelResult[this.KEYS.SETTINGS_PANEL_OPEN] || false,
+                organizeByDate: panelResult[this.KEYS.ORGANIZE_BY_DATE] || false,
                 targetFolder: this.sanitizeFolderName(folderResult[this.KEYS.TARGET_FOLDER])
             };
         } catch (error) {
@@ -223,6 +229,7 @@ const Settings = {
                 firmwareType: 'stock',
                 deviceIp: '192.168.3.3',
                 settingsPanelOpen: false,
+                organizeByDate: false,
                 targetFolder: this.DEFAULTS.TARGET_FOLDER
             };
         }

@@ -1,6 +1,10 @@
 // Cross-browser compatibility
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 
+// TransferUtils is loaded as a classic popup script so the same validation is
+// available to the service worker through importScripts.
+const MAX_SCANNED_DIRECTORIES = 200;
+
 /**
  * File Manager
  * Handles device communication (X4 standard and CrossPoint firmware)
@@ -102,32 +106,35 @@ export class FileManager {
      * @returns {Promise<Array>}
      */
     async loadFolderFiles(settings, sortOrder = 'newest') {
+        this.lastLoadError = null;
         try {
             const isCrosspoint = settings.firmwareType === 'crosspoint';
             const ip = settings.deviceIp;
             const targetFolder = this.getTargetFolder(settings);
-            const firmwareType = isCrosspoint ? 'crosspoint' : 'stock';
-
-            const listUrl = globalThis.FolderPath
-                ? globalThis.FolderPath.listUrl(ip, firmwareType, targetFolder)
-                : (() => {
-                    const url = new URL(isCrosspoint ? `http://${ip}/api/files` : `http://${ip}/list`);
-                    if (isCrosspoint) {
-                        url.searchParams.set('path', `/${targetFolder}`);
-                    } else {
-                        url.searchParams.set('dir', `/${targetFolder}/`);
-                    }
-                    return url.toString();
-                })();
-
-            let epubFiles;
-            const response = await this.bgFetch(listUrl);
-            const files = await response.json();
-
-            if (isCrosspoint) {
-                epubFiles = files.filter(f => !f.isDirectory && f.name.endsWith('.epub'));
-            } else {
-                epubFiles = files.filter(f => f.type === 'file' && f.name.endsWith('.epub'));
+            const allowed = new Set(['.epub', '.txt', '.xtc']);
+            const pending = [targetFolder];
+            const visited = new Set();
+            let epubFiles = [];
+            while (pending.length) {
+                if (visited.size >= MAX_SCANNED_DIRECTORIES) {
+                    const error = new Error(`Stopped after scanning ${MAX_SCANNED_DIRECTORIES} folders under ${targetFolder}.`);
+                    error.code = 'SCAN_LIMIT';
+                    throw error;
+                }
+                const folder = pending.shift();
+                if (visited.has(folder)) continue;
+                visited.add(folder);
+                const listUrl = new URL(isCrosspoint ? `http://${ip}/api/files` : `http://${ip}/list`);
+                listUrl.searchParams.set(isCrosspoint ? 'path' : 'dir', isCrosspoint ? `/${folder}` : `/${folder}/`);
+                const response = await this.bgFetch(listUrl.toString());
+                const files = await response.json();
+                if (!Array.isArray(files)) continue;
+                for (const file of files) {
+                    const isDirectory = isCrosspoint ? file.isDirectory === true || file.type === 'dir' : file.type === 'dir';
+                    if (isDirectory) { pending.push(`${folder}/${file.name}`); continue; }
+                    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+                    if (allowed.has(ext)) epubFiles.push({ ...file, folder });
+                }
             }
 
             // Enrich with parsed date for sorting
@@ -155,6 +162,7 @@ export class FileManager {
             return epubFiles;
         } catch (error) {
             console.error('[File Manager] Error loading folder:', error);
+            if (error.code === 'SCAN_LIMIT') this.lastLoadError = error.message;
             return []; // Return empty on error (folder might not exist)
         }
     }
@@ -182,15 +190,14 @@ export class FileManager {
      * @param {Object} settings 
      * @returns {Promise<boolean>}
      */
-    async deleteFile(filename, settings) {
+    async deleteFile(file, settings) {
         try {
-            console.log('[File Manager] Deleting file:', filename);
+            const filename = TransferUtils.safeFilename(typeof file === 'string' ? file : file.name);
             const isCrosspoint = settings.firmwareType === 'crosspoint';
             const ip = settings.deviceIp;
             const targetFolder = this.getTargetFolder(settings);
-            const fullPath = globalThis.FolderPath
-                ? globalThis.FolderPath.filePath(targetFolder, filename)
-                : `/${targetFolder}/${filename}`;
+            const folder = TransferUtils.safeDirectory(typeof file === 'string' ? targetFolder : file.folder);
+            const fullPath = `/${folder}/${filename}`;
 
             // Use URLSearchParams instead of FormData for message safety
             const params = new URLSearchParams();

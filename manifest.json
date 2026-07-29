@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Send to X4",
-  "version": "1.2.0",
+  "version": "1.2.3",
   "author": "Xatpy",
   "description": "Send articles from any website to Xteink X4 e-ink reader as EPUB",
   "permissions": [
@@ -18,19 +18,7 @@
     "<all_urls>"
   ],
   "background": {
-    "service_worker": "src/background/service_worker.js",
-    "scripts": [
-      "src/epub/jszip.min.js",
-      "src/utils/logger.js",
-      "src/utils/sanitize.js",
-      "src/utils/folder_path.js",
-      "src/epub/epub_templates.js",
-      "src/epub/epub_builder.js",
-      "src/upload/x4_upload_tab.js",
-      "src/upload/crosspoint_upload.js",
-      "src/utils/settings.js",
-      "src/background/service_worker.js"
-    ]
+    "service_worker": "src/background/service_worker.js"
   },
   "content_scripts": [
     {

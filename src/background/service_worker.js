@@ -3,21 +3,15 @@
  * Handles EPUB generation, X4 upload, and download fallback
  */
 
-// Cross-browser compatibility
-// Cross-browser compatibility
-// browserAPI is defined in settings.js, which is loaded before this script in manifest.json
-// const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
-
-// Import required modules (paths relative to service worker location in src/background/)
-// Import required modules
-// Note: In Firefox 'scripts' (Background Page), these are loaded via manifest.json.
-// In Chrome 'service_worker', importScripts works and is required.
+// `background.scripts` is a Manifest V2 field. Load the worker's dependencies
+// explicitly so the same Manifest V3 package works in Chrome and Firefox.
 if (typeof importScripts === 'function') {
     try {
         importScripts(
             '../epub/jszip.min.js',
             '../utils/logger.js',
             '../utils/sanitize.js',
+            '../utils/transfer_utils.js',
             '../utils/folder_path.js',
             '../epub/epub_templates.js',
             '../epub/epub_builder.js',
@@ -51,6 +45,11 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 success: false,
                 error: error.message
             }));
+        return true;
+    }
+
+    if (message.type === 'X4_UPLOAD_QUEUE_ITEM') {
+        handleUploadQueueItem(message, sendResponse);
         return true;
     }
 
@@ -300,39 +299,69 @@ async function handleSendArticle(messageData, sender, sendResponse) {
     }
 }
 
+/** Queue uploads intentionally do not download a fallback file on failure. */
+async function handleUploadQueueItem(messageData, sendResponse) {
+    try {
+        const { itemId, targetDirectory, filename } = messageData.payload;
+        const item = await readQueuedItem(itemId);
+        if (!item) throw new Error('This queue item is no longer available locally.');
+        const settings = messageData.settings || {};
+        const isCrosspoint = settings.firmwareType === 'crosspoint';
+        const uploader = isCrosspoint ? CrossPointUpload : X4UploadTab;
+        const deviceIp = settings.deviceIp || (isCrosspoint ? '192.168.4.1' : '192.168.3.3');
+        uploader.setIp(deviceIp);
+        let data;
+        let name = filename || item.filename;
+        let mimeType = item.mimeType;
+        if (item.kind === 'article') {
+            const epub = await EpubBuilder.build(item.article);
+            data = await EpubBuilder.blobToArrayBuffer(epub);
+            name = filename || EpubBuilder.generateFilename(item.article);
+            mimeType = 'application/epub+zip';
+        } else {
+            data = await item.blob.arrayBuffer();
+        }
+        const result = await uploader.uploadFile({ data, filename: name, mimeType, targetDirectory });
+        sendResponse(result);
+    } catch (error) {
+        sendResponse({ success: false, error: error.message || 'Transfer failed.' });
+    }
+}
+
 /**
- * Download EPUB as fallback
- * Chrome MV3 service workers: Use data URL (can't use createObjectURL)
- * Firefox MV3 service workers: Use Blob URL (data URLs blocked for security)
+ * Runtime messages are JSON-serialized in Chrome, so a queued Blob cannot be
+ * passed from the popup to this worker. Read it from the shared extension
+ * IndexedDB database instead.
+ */
+function readQueuedItem(id) {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open('send-to-x4-transfer-queue', 1);
+        request.onerror = () => reject(request.error || new Error('Could not read the local transfer queue.'));
+        request.onsuccess = () => {
+            const db = request.result;
+            const transaction = db.transaction('items', 'readonly');
+            const getRequest = transaction.objectStore('items').get(id);
+            getRequest.onsuccess = () => { db.close(); resolve(getRequest.result || null); };
+            getRequest.onerror = () => { db.close(); reject(getRequest.error || new Error('Could not read the queued item.')); };
+        };
+    });
+}
+
+/**
+ * Download EPUB as a base64 data URL. Service workers cannot create object
+ * URLs, so this path works consistently in Chrome and Firefox.
  */
 async function downloadEpubFallback(arrayBuffer, filename) {
     try {
         console.log('[X4 SW] Triggering download fallback...');
-
-        // Detect if we're in Firefox (has 'browser' namespace) or Chrome
-        const isFirefox = typeof browser !== 'undefined' && typeof browser.runtime !== 'undefined';
-        console.log('[X4 SW] Browser detected:', isFirefox ? 'Firefox' : 'Chrome');
-
-        let downloadUrl;
-
-        if (isFirefox) {
-            // Firefox: Use Blob URL (works in MV3 service workers)
-            console.log('[X4 SW] Using Blob URL for Firefox...');
-            const blob = new Blob([arrayBuffer], { type: 'application/epub+zip' });
-            downloadUrl = URL.createObjectURL(blob);
-            console.log('[X4 SW] Blob URL created:', downloadUrl);
-        } else {
-            // Chrome: Use data URL (works in service workers)
-            console.log('[X4 SW] Converting to data URL for Chrome...');
-            const bytes = new Uint8Array(arrayBuffer);
-            let binary = '';
-            for (let i = 0; i < bytes.length; i++) {
-                binary += String.fromCharCode(bytes[i]);
-            }
-            const base64 = btoa(binary);
-            downloadUrl = `data:application/epub+zip;base64,${base64}`;
-            console.log('[X4 SW] Data URL length:', downloadUrl.length);
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
         }
+        const base64 = btoa(binary);
+        const downloadUrl = `data:application/epub+zip;base64,${base64}`;
+        console.log('[X4 SW] Data URL length:', downloadUrl.length);
 
         // Trigger download
         console.log('[X4 SW] Calling browserAPI.downloads.download...');
@@ -343,15 +372,6 @@ async function downloadEpubFallback(arrayBuffer, filename) {
         });
 
         console.log('[X4 SW] Download triggered successfully, ID:', downloadId);
-
-        // Clean up Blob URL after download starts (Firefox only)
-        if (isFirefox) {
-            // Give the download a moment to start before revoking
-            setTimeout(() => {
-                URL.revokeObjectURL(downloadUrl);
-                console.log('[X4 SW] Blob URL revoked');
-            }, 1000);
-        }
     } catch (error) {
         console.error('[X4 SW] Download failed:', error);
         throw error;
