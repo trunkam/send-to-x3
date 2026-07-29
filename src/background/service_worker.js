@@ -348,38 +348,20 @@ function readQueuedItem(id) {
 }
 
 /**
- * Download EPUB as fallback
- * Chrome MV3 service workers: Use data URL (can't use createObjectURL)
- * Firefox MV3 service workers: Use Blob URL (data URLs blocked for security)
+ * Download EPUB as a base64 data URL. Service workers cannot create object
+ * URLs, so this path works consistently in Chrome and Firefox.
  */
 async function downloadEpubFallback(arrayBuffer, filename) {
     try {
         console.log('[X4 SW] Triggering download fallback...');
-
-        // Detect if we're in Firefox (has 'browser' namespace) or Chrome
-        const isFirefox = typeof browser !== 'undefined' && typeof browser.runtime !== 'undefined';
-        console.log('[X4 SW] Browser detected:', isFirefox ? 'Firefox' : 'Chrome');
-
-        let downloadUrl;
-
-        if (isFirefox) {
-            // Firefox: Use Blob URL (works in MV3 service workers)
-            console.log('[X4 SW] Using Blob URL for Firefox...');
-            const blob = new Blob([arrayBuffer], { type: 'application/epub+zip' });
-            downloadUrl = URL.createObjectURL(blob);
-            console.log('[X4 SW] Blob URL created:', downloadUrl);
-        } else {
-            // Chrome: Use data URL (works in service workers)
-            console.log('[X4 SW] Converting to data URL for Chrome...');
-            const bytes = new Uint8Array(arrayBuffer);
-            let binary = '';
-            for (let i = 0; i < bytes.length; i++) {
-                binary += String.fromCharCode(bytes[i]);
-            }
-            const base64 = btoa(binary);
-            downloadUrl = `data:application/epub+zip;base64,${base64}`;
-            console.log('[X4 SW] Data URL length:', downloadUrl.length);
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
         }
+        const base64 = btoa(binary);
+        const downloadUrl = `data:application/epub+zip;base64,${base64}`;
+        console.log('[X4 SW] Data URL length:', downloadUrl.length);
 
         // Trigger download
         console.log('[X4 SW] Calling browserAPI.downloads.download...');
@@ -390,15 +372,6 @@ async function downloadEpubFallback(arrayBuffer, filename) {
         });
 
         console.log('[X4 SW] Download triggered successfully, ID:', downloadId);
-
-        // Clean up Blob URL after download starts (Firefox only)
-        if (isFirefox) {
-            // Give the download a moment to start before revoking
-            setTimeout(() => {
-                URL.revokeObjectURL(downloadUrl);
-                console.log('[X4 SW] Blob URL revoked');
-            }, 1000);
-        }
     } catch (error) {
         console.error('[X4 SW] Download failed:', error);
         throw error;
