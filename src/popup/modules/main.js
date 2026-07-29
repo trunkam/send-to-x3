@@ -19,6 +19,7 @@ class PopupController {
         this.queueItems = [];
         this.sendingQueue = false;
         this.stopQueueRequested = false;
+        this.deviceConnected = false;
     }
 
     async init() {
@@ -38,6 +39,7 @@ class PopupController {
             onIpChange: (e) => this.handleIpChange(e),
             onTargetFolderChange: (e) => this.handleTargetFolderChange(e),
             onConnect: () => this.handleConnect(),
+            onRefreshDevice: () => this.handleDeviceRefresh(),
             onSettingsToggle: () => this.handleSettingsToggle(),
             onSortChange: (e) => this.handleSortChange(e)
         });
@@ -123,6 +125,7 @@ class PopupController {
         const result = await this.fileManager.checkDevice(this.settings);
 
         if (result.connected) {
+            this.deviceConnected = true;
             this.ui.showDeviceConnected(this.settings.deviceIp);
 
             // Load files
@@ -132,6 +135,7 @@ class PopupController {
             if (force) this.ui.setConnectButtonState('success');
             return true;
         } else {
+            this.deviceConnected = false;
             this.ui.showDeviceDisconnected();
             if (force) this.ui.setConnectButtonState('error');
             return false;
@@ -206,6 +210,15 @@ class PopupController {
         }
 
         await this.checkDevice(true);
+    }
+
+    async handleDeviceRefresh() {
+        this.ui.setDeviceRefreshState(true);
+        try {
+            await this.checkDevice();
+        } finally {
+            this.ui.setDeviceRefreshState(false);
+        }
     }
 
     async handleSortChange(event) {
@@ -344,7 +357,7 @@ class PopupController {
 
     async handleSend() {
         const article = this.articleManager.articleData;
-        if (!article) return;
+        if (!article || !this.deviceConnected) return;
 
         const uiSettings = this.ui.getSettingsFromUI();
         if (uiSettings.targetFolder && uiSettings.targetFolder !== this.settings.targetFolder) {

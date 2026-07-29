@@ -5,6 +5,8 @@
 export class UIManager {
     constructor() {
         this.elements = {};
+        this.deviceConnected = false;
+        this.sendInProgress = false;
         this.cacheElements();
     }
 
@@ -30,7 +32,9 @@ export class UIManager {
             organizeByDate: document.getElementById('organize-by-date'),
             deviceLoading: document.getElementById('device-loading'),
             deviceConnected: document.getElementById('device-connected'),
+            deviceConnectedLabel: document.getElementById('device-connected-label'),
             deviceDisconnected: document.getElementById('device-disconnected'),
+            deviceRefreshBtn: document.getElementById('device-refresh-btn'),
             deviceFiles: document.getElementById('device-files'),
             fileCount: document.getElementById('file-count'),
             fileListItems: document.getElementById('file-list-items'),
@@ -59,6 +63,7 @@ export class UIManager {
         if (handlers.onIpChange) this.elements.deviceIpInput.addEventListener('change', handlers.onIpChange);
         if (handlers.onTargetFolderChange) this.elements.targetFolderInput.addEventListener('change', handlers.onTargetFolderChange);
         if (handlers.onConnect) this.elements.connectBtn.addEventListener('click', handlers.onConnect);
+        if (handlers.onRefreshDevice) this.elements.deviceRefreshBtn.addEventListener('click', handlers.onRefreshDevice);
         if (handlers.onSettingsToggle) this.elements.settingsHeader.addEventListener('click', handlers.onSettingsToggle);
         if (handlers.onSortChange) this.elements.sortSelect.addEventListener('change', handlers.onSortChange);
     }
@@ -111,10 +116,8 @@ export class UIManager {
         this.elements.deviceConnected.classList.remove('hidden');
 
         // Update the displayed IP address
-        const ipDisplay = this.elements.deviceConnected.querySelector('span:last-child');
-        if (ipDisplay) {
-            ipDisplay.textContent = `Connected to ${ip}`;
-        }
+        this.elements.deviceConnectedLabel.textContent = `Connected to ${ip}`;
+        this.setSendAvailability(true);
     }
 
     showDeviceDisconnected() {
@@ -122,6 +125,18 @@ export class UIManager {
         this.elements.deviceConnected.classList.add('hidden');
         this.elements.deviceFiles.classList.add('hidden');
         this.elements.deviceDisconnected.classList.remove('hidden');
+        this.setSendAvailability(false);
+    }
+
+    setSendAvailability(connected) {
+        this.deviceConnected = connected;
+        this.elements.sendBtn.disabled = !connected || this.sendInProgress;
+    }
+
+    setDeviceRefreshState(refreshing) {
+        const btn = this.elements.deviceRefreshBtn;
+        btn.disabled = refreshing;
+        btn.innerHTML = refreshing ? '<span class="btn-spinner"></span>' : '↻';
     }
 
     showFileList(files, onDelete, errorMessage = null) {
@@ -253,13 +268,15 @@ export class UIManager {
 
         switch (state) {
             case 'sending':
+                this.sendInProgress = true;
                 btn.disabled = true;
                 iconSpan.innerHTML = '<div class="btn-spinner"></div>';
                 textSpan.textContent = 'Sending...';
                 break;
 
             case 'success':
-                btn.disabled = false;
+                this.sendInProgress = false;
+                btn.disabled = !this.deviceConnected;
                 btn.classList.add('success');
                 iconSpan.textContent = '✅';
                 textSpan.textContent = message || 'Sent!';
@@ -267,7 +284,8 @@ export class UIManager {
                 break;
 
             case 'error':
-                btn.disabled = false;
+                this.sendInProgress = false;
+                btn.disabled = !this.deviceConnected;
                 btn.classList.add('error');
                 iconSpan.textContent = '❌';
                 textSpan.textContent = message || 'Failed';
@@ -275,7 +293,8 @@ export class UIManager {
                 break;
 
             default:
-                btn.disabled = false;
+                this.sendInProgress = false;
+                btn.disabled = !this.deviceConnected;
                 iconSpan.textContent = '📖';
                 textSpan.textContent = 'Send to X4';
                 break;

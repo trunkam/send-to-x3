@@ -269,6 +269,43 @@ body {
     color: #a1a1aa;
 }
 
+.device-refresh-btn {
+    margin-left: auto;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #3f3f46;
+    border-radius: 6px;
+    background: #27272a;
+    color: #a1a1aa;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    transition: all 0.2s ease;
+}
+
+.device-refresh-btn:hover:not(:disabled) {
+    background: #3f3f46;
+    color: #e4e4e7;
+    border-color: #52525b;
+}
+
+.device-refresh-btn:disabled {
+    cursor: wait;
+    opacity: 0.7;
+}
+
+.device-refresh-btn .btn-spinner {
+    width: 13px;
+    height: 13px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
 .status-indicator {
     width: 8px;
     height: 8px;
