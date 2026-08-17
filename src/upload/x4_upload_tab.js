@@ -17,7 +17,7 @@ const X4UploadTab = {
 
     get UPLOAD_ENDPOINT() { return `http://${this.ip}/edit`; },
     get LIST_ENDPOINT() { return `http://${this.ip}/list`; },
-    DEFAULT_TARGET_FOLDER: 'send-to-x4',
+    DEFAULT_TARGET_FOLDER: 'send-to-x3',
 
     /**
      * Upload EPUB to X4 via direct HTTP POST
@@ -174,7 +174,7 @@ const X4UploadTab = {
     /**
      * Upload file to specified path
      * @param {ArrayBuffer} data 
-     * @param {string} path - Full path including filename (e.g., /send-to-x4/file.epub)
+     * @param {string} path - Full path including filename (e.g., /send-to-x3/file.epub)
      * @returns {Promise<{success: boolean, error?: string}>}
      */
     async uploadRawFile(data, path, mimeType = 'application/octet-stream') {

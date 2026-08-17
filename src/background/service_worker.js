@@ -240,7 +240,7 @@ async function handleSendArticle(messageData, sender, sendResponse) {
         const deviceIp = settings.deviceIp || (isCrosspoint ? '192.168.4.1' : '192.168.3.3');
         // Re-sanitize here — do not trust the popup-supplied folder value
         const rawFolder = settings.targetFolder
-            || (typeof Settings !== 'undefined' ? await Settings.getTargetFolder() : 'send-to-x4');
+            || (typeof Settings !== 'undefined' ? await Settings.getTargetFolder() : 'send-to-x3');
         const targetFolder = (typeof globalThis.FolderPath !== 'undefined')
             ? globalThis.FolderPath.sanitize(rawFolder)
             : (typeof Settings !== 'undefined'

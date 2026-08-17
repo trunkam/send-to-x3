@@ -17,7 +17,7 @@ export class FileManager {
     }
 
     getTargetFolder(settings) {
-        const raw = settings?.targetFolder || 'send-to-x4';
+        const raw = settings?.targetFolder || 'send-to-x3';
         const api = globalThis.FolderPath || globalThis.Settings;
         if (api?.sanitize) {
             return api.sanitize(raw);

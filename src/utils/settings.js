@@ -21,7 +21,7 @@ const Settings = {
     DEFAULTS: {
         STOCK_IP: '192.168.3.3',
         CROSSPOINT_IP: '192.168.4.1',
-        TARGET_FOLDER: 'send-to-x4'
+        TARGET_FOLDER: 'send-to-x3'
     },
 
     /**
@@ -73,10 +73,10 @@ const Settings = {
                 return 'crosspoint';
             }
 
-            return 'stock';
+            return 'crosspoint';
         } catch (error) {
             console.error('[Settings] Error getting firmware type:', error);
-            return 'stock';
+            return 'crosspoint';
         }
     },
 
@@ -226,8 +226,8 @@ const Settings = {
         } catch (error) {
             console.error('[Settings] Error getting all settings:', error);
             return {
-                firmwareType: 'stock',
-                deviceIp: '192.168.3.3',
+                firmwareType: 'crosspoint',
+                deviceIp: this.DEFAULTS.CROSSPOINT_IP,
                 settingsPanelOpen: false,
                 organizeByDate: false,
                 targetFolder: this.DEFAULTS.TARGET_FOLDER

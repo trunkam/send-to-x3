@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Send to X4</title>
+  <title>Send to X3</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 
@@ -12,7 +12,7 @@
   <div class="popup-container">
     <!-- Header -->
     <header class="popup-header">
-      <h1>📖 Send to X4</h1>
+      <h1>📖 Send to X3</h1>
     </header>
 
     <!-- Article Section -->
@@ -33,7 +33,7 @@
         <div class="button-group">
           <button id="send-btn" class="send-btn primary" disabled>
             <span class="btn-icon">📖</span>
-            <span class="btn-text">Send to X4</span>
+            <span class="btn-text">Send to X3</span>
           </button>
           <button id="download-btn" class="send-btn secondary">
             <span class="btn-icon">📥</span>
@@ -63,7 +63,7 @@
 
     <section id="queue-section" class="section">
       <div class="section-header"><span class="section-icon">🗂️</span><span class="section-title">Transfer queue</span><span id="queue-count" class="file-count">0 items</span></div>
-      <p class="hint queue-hint">Add items while online, then keep this popup open while sending them on X4 WiFi.</p>
+      <p class="hint queue-hint">Add items while online, then keep this popup open while sending them to the X3.</p>
       <div class="button-group queue-actions">
         <label for="import-files" class="send-btn secondary"><span class="btn-icon">📂</span><span class="btn-text">Add files</span></label>
         <input id="import-files" type="file" accept=".epub,.txt,.xtc" multiple class="hidden">
@@ -80,7 +80,7 @@
     <section id="device-section" class="section">
       <div class="section-header">
         <span class="section-icon">📱</span>
-        <span class="section-title">X4 Device</span>
+        <span class="section-title">X3 Device</span>
       </div>
 
       <div id="device-loading" class="device-status loading-small">
@@ -97,12 +97,12 @@
       <div id="device-disconnected" class="device-status hidden">
         <div class="status-indicator disconnected"></div>
         <span>Not connected</span>
-        <p class="hint">Connect to X4 WiFi hotspot</p>
+        <p class="hint">Put the X3 in File Transfer mode, or check its address in Settings</p>
       </div>
 
       <div id="device-files" class="file-list hidden">
         <div class="file-list-header">
-          <span id="folder-label">📁 send-to-x4/</span>
+          <span id="folder-label">📁 send-to-x3/</span>
           <span id="file-count" class="file-count">0 files</span>
         </div>
         <div class="file-controls">
@@ -152,15 +152,15 @@
 
         <div class="settings-sub-option">
           <label class="input-label" for="target-folder">Destination Folder</label>
-          <input type="text" id="target-folder" class="settings-input" placeholder="send-to-x4" value="send-to-x4">
-          <p class="hint">EPUBs are saved to this folder on your X4. Renaming does not move existing files.</p>
+          <input type="text" id="target-folder" class="settings-input" placeholder="send-to-x3" value="send-to-x3">
+          <p class="hint">EPUBs are saved to this folder on your X3. Renaming does not move existing files.</p>
         </div>
       </div>
     </section>
 
     <!-- Footer -->
     <footer class="popup-footer">
-      <a href="https://github.com/Xatpy/send-to-x4" target="_blank" class="footer-link">v1.2.3</a>
+      <a href="https://github.com/trunkam/send-to-x3" target="_blank" class="footer-link">v1.3.0</a>
     </footer>
   </div>
 

@@ -25,7 +25,7 @@ const CrossPointUpload = {
     get listEndpoint() { return `http://${this.ip}/api/files`; },
     get mkdirEndpoint() { return `http://${this.ip}/mkdir`; },
     get deleteEndpoint() { return `http://${this.ip}/delete`; },
-    DEFAULT_TARGET_FOLDER: 'send-to-x4',
+    DEFAULT_TARGET_FOLDER: 'send-to-x3',
 
     /**
      * Upload EPUB to CrossPoint device
@@ -178,7 +178,7 @@ const CrossPointUpload = {
      * Upload file to specified path
      * @param {ArrayBuffer} data
      * @param {string} filename - Just the filename (e.g., "file.epub")
-     * @param {string} path - Directory path (e.g., "/send-to-x4")
+     * @param {string} path - Directory path (e.g., "/send-to-x3")
      * @returns {Promise<{success: boolean, error?: string}>}
      */
     async uploadRawFile(data, filename, path, mimeType = 'application/octet-stream') {

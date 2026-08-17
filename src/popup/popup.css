@@ -1,4 +1,4 @@
-/* Popup Styles for Send to X4 Extension */
+/* Popup Styles for Send to X3 Extension */
 
 * {
     box-sizing: border-box;
@@ -646,4 +646,41 @@ body {
     border-top-color: white;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
+}
+
+/* Firefox for Android
+   The popup is not a small window here: it fills the screen. Desktop's fixed
+   400px column and short scroll areas have to give way to the viewport. */
+@media (max-width: 480px) {
+    body {
+        min-width: 0;
+        max-width: 100%;
+        font-size: 15px;
+    }
+
+    /* Sized for a popup window; on a full screen they leave most of it empty. */
+    .file-items {
+        max-height: 45vh;
+    }
+
+    .queue-items {
+        max-height: 40vh;
+    }
+
+    /* The collapse animation clips anything past max-height. A taller phone
+       column overflows 500px, which would silently hide the lower settings. */
+    .settings-content {
+        max-height: 1200px;
+    }
+
+    /* Roughly 44px tall: below that, a fingertip misses. */
+    .send-btn {
+        padding: 14px 12px;
+        font-size: 15px;
+    }
+
+    .device-refresh-btn {
+        min-width: 44px;
+        min-height: 44px;
+    }
 }

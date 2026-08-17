@@ -3,7 +3,7 @@
  * Enforces a single path segment and builds device URLs without string concatenation.
  */
 const FolderPath = {
-    DEFAULT: 'send-to-x4',
+    DEFAULT: 'send-to-x3',
 
     /**
      * Sanitize a folder name to a single safe path segment.
@@ -39,7 +39,7 @@ const FolderPath = {
     },
 
     /**
-     * Device directory path for the target folder (e.g. /send-to-x4).
+     * Device directory path for the target folder (e.g. /send-to-x3).
      * @param {string} folder
      * @param {{ trailingSlash?: boolean }} [options]
      * @returns {string}
@@ -50,7 +50,7 @@ const FolderPath = {
     },
 
     /**
-     * Full device file path (e.g. /send-to-x4/file.epub).
+     * Full device file path (e.g. /send-to-x3/file.epub).
      * @param {string} folder
      * @param {string} filename
      * @returns {string}
