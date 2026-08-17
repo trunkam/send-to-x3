@@ -14,7 +14,7 @@
   "host_permissions": [
     "http://192.168.3.3/*",
     "http://192.168.4.1/*",
-    "http://192.168.1.224/*",
+    "http://172.16.24.159/*",
     "<all_urls>"
   ],
   "background": {
@@ -42,7 +42,7 @@
       "exclude_matches": [
         "http://192.168.3.3/*",
         "http://192.168.4.1/*",
-        "http://192.168.1.224/*"
+        "http://172.16.24.159/*"
       ],
       "js": [
         "src/content/readability.min.js"
