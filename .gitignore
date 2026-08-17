@@ -42,3 +42,6 @@ x4-send/
 # custom
 website/
 store/
+# web-ext build/sign output
+web-ext-artifacts/
+*.xpi
