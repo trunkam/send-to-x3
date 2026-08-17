@@ -14,7 +14,7 @@ class PopupController {
         this.ui = new UIManager();
         this.fileManager = new FileManager();
         this.articleManager = new ArticleManager();
-        this.settings = { firmwareType: 'crosspoint', deviceIp: '192.168.4.1', settingsPanelOpen: false, organizeByDate: false, targetFolder: 'send-to-x3' };
+        this.settings = { firmwareType: 'crosspoint', deviceIp: '172.16.24.159', settingsPanelOpen: false, organizeByDate: false, targetFolder: 'send-to-x3' };
         this.currentSort = 'newest'; // Default sort
         this.queueItems = [];
         this.sendingQueue = false;

@@ -20,7 +20,11 @@ const Settings = {
 
     DEFAULTS: {
         STOCK_IP: '192.168.3.3',
-        CROSSPOINT_IP: '192.168.4.1',
+        // The X3 joins the phone's hotspot rather than serving its own, so the
+        // address comes from the phone's DHCP pool, not CrossPoint's fixed
+        // 192.168.4.1. It is stable in practice but can change: the settings
+        // panel overrides it.
+        CROSSPOINT_IP: '172.16.24.159',
         TARGET_FOLDER: 'send-to-x3'
     },
 
