@@ -45,3 +45,6 @@ store/
 # web-ext build/sign output
 web-ext-artifacts/
 *.xpi
+
+# Piano di lavoro locale: contiene dati di rete personali
+PLAN.md
