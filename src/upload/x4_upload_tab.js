@@ -43,7 +43,7 @@ const X4UploadTab = {
             const safeDirectory = TransferUtils.safeDirectory(targetDirectory || this.DEFAULT_TARGET_FOLDER);
             const folderReady = await this.ensureDirectory(safeDirectory);
             if (!folderReady) {
-                return { success: false, error: `Could not create /${safeDirectory} on X4` };
+                return { success: false, error: `Could not create /${safeDirectory} on X3` };
             }
 
             // Step 2: Determine upload path
@@ -214,7 +214,7 @@ const X4UploadTab = {
             if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
                 return {
                     success: false,
-                    error: 'Cannot reach X4. Make sure you are on X4 WiFi.'
+                    error: 'Cannot reach X3. Make sure the device is reachable on the network.'
                 };
             }
 

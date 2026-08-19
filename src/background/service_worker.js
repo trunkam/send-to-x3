@@ -248,7 +248,7 @@ async function handleSendArticle(messageData, sender, sendResponse) {
                 : rawFolder);
 
         const uploader = isCrosspoint ? CrossPointUpload : X4UploadTab;
-        const apiName = isCrosspoint ? 'CrossPoint' : 'standard X4';
+        const apiName = isCrosspoint ? 'CrossPoint' : 'standard X3';
 
         await logToPopup(`Configuring ${apiName} with IP: ${deviceIp}`);
 
@@ -261,7 +261,7 @@ async function handleSendArticle(messageData, sender, sendResponse) {
         }
 
         // Step 3: Upload
-        if (tabId) await sendStatusUpdate(sender, 'uploading', 'Sending to X4...');
+        if (tabId) await sendStatusUpdate(sender, 'uploading', 'Sending to X3...');
         await logToPopup(`Attempting upload to ${deviceIp}/${targetFolder}/...`);
 
         const uploadResult = await uploader.uploadEpub(arrayBuffer, filename, targetFolder);
@@ -271,14 +271,14 @@ async function handleSendArticle(messageData, sender, sendResponse) {
             await logToPopup('Upload successful!');
             sendResponse({
                 success: true,
-                message: 'Sent to X4!'
+                message: 'Sent to X3!'
             });
             return;
         }
 
         // Step 3: Fallback
         await logToPopup(`Upload failed (${uploadResult.error}), falling back to download.`);
-        if (tabId) await sendStatusUpdate(sender, 'downloading', 'Downloading (X4 upload failed)...');
+        if (tabId) await sendStatusUpdate(sender, 'downloading', 'Downloading (X3 upload failed)...');
 
         await downloadEpubFallback(arrayBuffer, filename);
 

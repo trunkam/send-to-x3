@@ -52,7 +52,7 @@ class PopupController {
                 if (message.status === 'generating') {
                     this.ui.setSendButtonState('loading', 'Generating EPUB...');
                 } else if (message.status === 'uploading') {
-                    this.ui.setSendButtonState('loading', 'Uploading to X4...');
+                    this.ui.setSendButtonState('loading', 'Uploading to X3...');
                 } else if (message.status === 'downloading') {
                     this.ui.setSendButtonState('loading', 'Downloading...');
                 }
@@ -288,7 +288,7 @@ class PopupController {
             for (const item of [...this.queueItems]) {
                 const result = await this.sendQueueItem(item, true);
                 if (!result.success && result.connectivityFailure) {
-                    this.ui.setQueueProgress('Connection to X4 was lost. Remaining items are still queued.');
+                    this.ui.setQueueProgress('Connection to X3 was lost. Remaining items are still queued.');
                     break;
                 }
                 if (this.stopQueueRequested) break;
@@ -332,7 +332,7 @@ class PopupController {
 
     async handleDelete(file, liElement) {
         const filename = typeof file === 'string' ? file : file.name;
-        if (!confirm(`Delete "${filename}" from X4?`)) return;
+        if (!confirm(`Delete "${filename}" from X3?`)) return;
 
         liElement.classList.add('deleting'); // UI optimistically? UIManager should handle this ideally but we passed liElement
         // Actually UIManager doesn't expose class manipulation for list items easily.

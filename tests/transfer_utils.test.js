@@ -37,7 +37,7 @@ test('resolves dated destinations and collision names', () => {
     assert.equal(utils.dateFolder('2026-07-17'), '2026-07-17');
     assert.equal(utils.dateFolder('2026-02-30'), null);
     assert.equal(utils.collisionFilename('Article.epub', 1), 'Article (2).epub');
-    assert.equal(utils.isConnectivityError('Cannot reach X4. Make sure you are on X4 WiFi.'), true);
+    assert.equal(utils.isConnectivityError('Cannot reach X3. Make sure the device is reachable on the network.'), true);
     assert.equal(utils.isConnectivityError('Upload failed with status 500'), false);
 });
 

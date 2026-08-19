@@ -296,7 +296,7 @@ export class UIManager {
                 this.sendInProgress = false;
                 btn.disabled = !this.deviceConnected;
                 iconSpan.textContent = '📖';
-                textSpan.textContent = 'Send to X4';
+                textSpan.textContent = 'Send to X3';
                 break;
         }
     }
