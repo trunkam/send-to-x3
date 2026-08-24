@@ -31,18 +31,19 @@ export class ArticleManager {
 
             console.log('[Article Manager] Checking tab:', tab.url);
 
-            // First, inject Readability into the page if not already present
+            // Readability reaches the page only here now: the manifest no longer
+            // declares it as a content script, since this ran on every popup
+            // open anyway and the declared copy was loaded into every page.
             try {
-                // We inject it every time just in case. Content scripts usually run once but popup re-runs.
-                // However, executeScript files: [] runs immediately.
                 await browserAPI.scripting.executeScript({
                     target: { tabId: tab.id },
                     files: ['src/content/readability.min.js']
                 });
                 console.log('[Article Manager] Readability injected');
             } catch (injectError) {
-                console.log('[Article Manager] Could not inject Readability (maybe already there?):', injectError.message);
-                // Continue anyway, extraction logic checks for Readability presence
+                // Extraction still runs and falls back to its own heuristics,
+                // but the result is worse, so this is worth shouting about.
+                console.error('[Article Manager] Could not inject Readability:', injectError.message);
             }
 
             // Now execute extraction logic

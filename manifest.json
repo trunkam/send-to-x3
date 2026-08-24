@@ -34,23 +34,6 @@
       "src/background/service_worker.js"
     ]
   },
-  "content_scripts": [
-    {
-      "matches": [
-        "https://*/*",
-        "http://*/*"
-      ],
-      "exclude_matches": [
-        "http://192.168.3.3/*",
-        "http://192.168.4.1/*",
-        "http://172.16.24.159/*"
-      ],
-      "js": [
-        "src/content/readability.min.js"
-      ],
-      "run_at": "document_idle"
-    }
-  ],
   "action": {
     "default_title": "Send to X3",
     "default_popup": "src/popup/popup.html",
