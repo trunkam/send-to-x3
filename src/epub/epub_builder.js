@@ -9,6 +9,18 @@ const MAX_EPUB_SANITIZED_BASENAME_CHARS = 500;
 const MAX_EPUB_BASENAME_BYTES = 240;
 
 /**
+ * Month and day of the local calendar day, zero padded. The padding is what
+ * makes the device's alphabetical file order match date order: unpadded,
+ * 12-31 would sort before 2-1. Local components rather than toISOString(), so
+ * an article sent late in the evening does not carry tomorrow's date.
+ */
+function sendDatePrefix(date) {
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${month}-${day}`;
+}
+
+/**
  * Limit a string by UTF-8 byte length without splitting a Unicode code point.
  * Grapheme clusters can still be truncated. This leaves room for the .epub
  * extension within common 255-byte filesystem filename limits.
@@ -99,11 +111,22 @@ const EpubBuilder = {
 
     /**
      * Generate a filename for the EPUB
-     * Format: @handle - YYYY-MM-DD - first words.epub
+     * Format: MM-DD Title - Author - source - YYYY-MM-DD.epub
+     *
+     * The MM-DD prefix is the day the file is generated, not the day the
+     * article was published: the device list truncates long names, so what
+     * makes a file findable at a glance has to sit at the front, and the day
+     * you sent it is how you look for it. It carries no year on purpose - a
+     * send date is always recent, so the year adds nothing. That reasoning
+     * does not hold for the publication date, which stays in full at the end
+     * of the name: file_manager.parseDateFromFilename reads it to sort the
+     * list, and a two-digit prefix does not fool its YYYY-MM-DD pattern.
+     *
      * @param {Object} article - { title, author, date }
+     * @param {Date} [now] - the send date; injectable so tests are stable
      * @returns {string}
      */
-    generateFilename(article) {
+    generateFilename(article, now = new Date()) {
         const parts = [];
 
         // 1. Title (First)
@@ -139,7 +162,7 @@ const EpubBuilder = {
         // dates and source domains are external input too. Limit its encoded
         // size, not its character count, because filenames are byte-limited.
         const safeBasename = Sanitizer.sanitizeFilename(
-            parts.join(' - '),
+            `${sendDatePrefix(now)} ${parts.join(' - ')}`,
             MAX_EPUB_SANITIZED_BASENAME_CHARS
         );
         const basename = truncateUtf8(safeBasename, MAX_EPUB_BASENAME_BYTES);
@@ -172,3 +195,9 @@ const EpubBuilder = {
         });
     }
 };
+
+// Expose for classic scripts, ES modules (globalThis), and Node tests (CommonJS)
+globalThis.EpubBuilder = EpubBuilder;
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = EpubBuilder;
+}

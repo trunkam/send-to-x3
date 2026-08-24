@@ -118,3 +118,9 @@ const Sanitizer = {
         return String(text).replace(/[&<>"']/g, m => map[m]);
     }
 };
+
+// Expose for classic scripts, ES modules (globalThis), and Node tests (CommonJS)
+globalThis.Sanitizer = Sanitizer;
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = Sanitizer;
+}
