@@ -10,10 +10,15 @@ const MAX_SCANNED_DIRECTORIES = 200;
  * Handles device communication (X4 standard and CrossPoint firmware)
  */
 export class FileManager {
+    /**
+     * One reachability probe waits this long. On the local network the device
+     * answers in about 5 ms; an address we are not on never answers at all, so
+     * this is only ever the cost of being disconnected.
+     */
+    static PROBE_TIMEOUT_MS = 2500;
+
     constructor() {
-        this.X4_URL = 'http://192.168.3.3';
-        this.X4_EDIT_URL = 'http://192.168.3.3/edit';
-        this.X4_LIST_URL = 'http://192.168.3.3/list';
+        this.lastLoadError = null;
     }
 
     getTargetFolder(settings) {
@@ -33,7 +38,7 @@ export class FileManager {
      * @param {string} url 
      * @param {Object} options 
      */
-    async bgFetch(url, options = {}) {
+    async bgFetch(url, options = {}, timeoutMs) {
         // We cannot pass AbortSignal via message, so we omit it.
         // The background script handles the fetch. We can implement timeout here via race if needed,
         // but for now let's rely on the background script's fetch.
@@ -45,7 +50,8 @@ export class FileManager {
             type: 'X4_FETCH',
             payload: {
                 url,
-                options: safeOptions
+                options: safeOptions,
+                timeoutMs
             }
         });
 
@@ -64,39 +70,96 @@ export class FileManager {
     }
 
     /**
-     * Check if device is reachable
-     * @param {Object} settings - { useCrosspointFirmware, crosspointIp }
-     * @returns {Promise<{connected: boolean, files: Array}>}
+     * Addresses to try, best guess first.
+     * @param {Object} settings
+     * @returns {string[]}
+     */
+    candidateIps(settings) {
+        const list = Array.isArray(settings.deviceIps) && settings.deviceIps.length > 0
+            ? settings.deviceIps
+            : [settings.deviceIp];
+
+        if (globalThis.DeviceIps) {
+            return globalThis.DeviceIps.order(list, settings.deviceIp);
+        }
+
+        return list.filter(Boolean);
+    }
+
+    /**
+     * Root listing URL, used both as the connectivity probe and as the first
+     * directory read.
+     * @param {string} ip
+     * @param {Object} settings
+     * @returns {string}
+     */
+    rootListUrl(ip, settings) {
+        const isCrosspoint = settings.firmwareType === 'crosspoint';
+        const firmwareType = isCrosspoint ? 'crosspoint' : 'stock';
+
+        if (globalThis.FolderPath) {
+            return globalThis.FolderPath.rootListUrl(ip, firmwareType);
+        }
+
+        return isCrosspoint
+            ? `http://${ip}/api/files?path=/`
+            : `http://${ip}/list?dir=/`;
+    }
+
+    /**
+     * Check whether the device answers, trying every known address at once.
+     *
+     * The X3 has a different address on the phone hotspot than on the home
+     * LAN. Probing them in parallel and keeping whichever replies means the
+     * address never has to be retyped; a hit settles as fast as a single
+     * check, because the addresses we are not on simply never answer.
+     *
+     * @param {Object} settings - { firmwareType, deviceIp, deviceIps }
+     * @returns {Promise<{connected: boolean, files: Array, ip: string|null, error?: string}>}
      */
     async checkDevice(settings) {
-        try {
-            const isCrosspoint = settings.firmwareType === 'crosspoint';
-            const ip = settings.deviceIp;
-            const firmwareType = isCrosspoint ? 'crosspoint' : 'stock';
+        const candidates = this.candidateIps(settings);
 
-            const listPath = globalThis.FolderPath
-                ? globalThis.FolderPath.rootListUrl(ip, firmwareType)
-                : (isCrosspoint
-                    ? `http://${ip}/api/files?path=/`
-                    : `http://${ip}/list?dir=/`);
-
-            console.log('[File Manager] Checking device:', { type: settings.firmwareType, ip, url: listPath });
-
-            const response = await this.bgFetch(listPath, {
-                method: 'GET'
-            });
-
-            if (!response.ok) {
-                return { connected: false, files: [] };
-            }
-
-            const files = await response.json();
-            return { connected: true, files };
-
-        } catch (error) {
-            console.log('[File Manager] Device not reachable:', error.message);
-            return { connected: false, files: [], error: error.message };
+        if (candidates.length === 0) {
+            return { connected: false, files: [], ip: null };
         }
+
+        console.log('[File Manager] Checking device:', { type: settings.firmwareType, candidates });
+
+        const listings = new Map();
+        let lastError = null;
+
+        const probe = async (ip) => {
+            try {
+                const response = await this.bgFetch(
+                    this.rootListUrl(ip, settings),
+                    { method: 'GET' },
+                    FileManager.PROBE_TIMEOUT_MS
+                );
+
+                if (!response.ok) {
+                    return false;
+                }
+
+                listings.set(ip, await response.json());
+                return true;
+            } catch (error) {
+                lastError = error.message;
+                console.log('[File Manager] No answer from', ip + ':', error.message);
+                return false;
+            }
+        };
+
+        const reachable = globalThis.DeviceIps
+            ? await globalThis.DeviceIps.firstReachable(candidates, probe)
+            : (await probe(candidates[0]) ? candidates[0] : null);
+
+        if (!reachable) {
+            return { connected: false, files: [], ip: null, error: lastError || undefined };
+        }
+
+        console.log('[File Manager] Device answered at', reachable);
+        return { connected: true, files: listings.get(reachable) || [], ip: reachable };
     }
 
     /**

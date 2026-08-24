@@ -42,7 +42,8 @@ export class UIManager {
             firmwareTypeSelect: document.getElementById('firmware-type'),
             targetFolderInput: document.getElementById('target-folder'),
             deviceIpContainer: document.getElementById('device-ip-container'),
-            deviceIpInput: document.getElementById('device-ip'),
+            deviceIpList: document.getElementById('device-ip-list'),
+            addIpBtn: document.getElementById('add-ip-btn'),
             connectBtn: document.getElementById('connect-btn'),
             settingsHeader: document.getElementById('settings-header'),
             settingsContent: document.getElementById('settings-content'),
@@ -60,7 +61,24 @@ export class UIManager {
         if (handlers.onStopQueue) this.elements.stopQueueBtn.addEventListener('click', handlers.onStopQueue);
         if (handlers.onOrganizeByDate) this.elements.organizeByDate.addEventListener('change', handlers.onOrganizeByDate);
         if (handlers.onSettingsChange) this.elements.firmwareTypeSelect.addEventListener('change', handlers.onSettingsChange);
-        if (handlers.onIpChange) this.elements.deviceIpInput.addEventListener('change', handlers.onIpChange);
+        if (handlers.onIpChange) {
+            // Delegated: rows come and go as addresses are added or removed
+            this.elements.deviceIpList.addEventListener('change', (event) => {
+                if (event.target.classList.contains('ip-input')) handlers.onIpChange(event);
+            });
+        }
+        if (handlers.onIpRemove) {
+            this.elements.deviceIpList.addEventListener('click', (event) => {
+                const button = event.target.closest('.ip-remove');
+                if (!button) return;
+                button.closest('.ip-row')?.remove();
+                if (!this.elements.deviceIpList.querySelector('.ip-row')) {
+                    this.addEmptyIpRow();
+                }
+                handlers.onIpRemove();
+            });
+        }
+        if (handlers.onAddIp) this.elements.addIpBtn.addEventListener('click', handlers.onAddIp);
         if (handlers.onTargetFolderChange) this.elements.targetFolderInput.addEventListener('change', handlers.onTargetFolderChange);
         if (handlers.onConnect) this.elements.connectBtn.addEventListener('click', handlers.onConnect);
         if (handlers.onRefreshDevice) this.elements.deviceRefreshBtn.addEventListener('click', handlers.onRefreshDevice);
@@ -201,16 +219,101 @@ export class UIManager {
 
     updateSettingsUI(settings) {
         this.elements.firmwareTypeSelect.value = settings.firmwareType;
-        this.elements.deviceIpInput.value = settings.deviceIp;
         this.elements.organizeByDate.checked = !!settings.organizeByDate;
         this.elements.targetFolderInput.value = settings.targetFolder;
         this.updateFolderLabel(settings.targetFolder);
-        // Optional: Update placeholder based on firmware type (UX improvement)
-        if (settings.firmwareType === 'crosspoint') {
-            this.elements.deviceIpInput.placeholder = '192.168.4.1';
-        } else {
-            this.elements.deviceIpInput.placeholder = '192.168.3.3';
+        this.renderDeviceIps(settings.deviceIps, settings.deviceIp);
+    }
+
+    /**
+     * Draw one editable row per known address, marking the one in use.
+     * @param {string[]} ips
+     * @param {string} activeIp
+     */
+    renderDeviceIps(ips, activeIp) {
+        const list = this.elements.deviceIpList;
+        if (!list) return;
+
+        list.textContent = '';
+
+        const rows = Array.isArray(ips) && ips.length > 0 ? ips : [''];
+        for (const ip of rows) {
+            list.appendChild(this.buildIpRow(ip, !!ip && ip === activeIp));
         }
+    }
+
+    /**
+     * @param {string} ip
+     * @param {boolean} isActive
+     * @returns {HTMLLIElement}
+     */
+    buildIpRow(ip, isActive) {
+        const row = document.createElement('li');
+        row.className = isActive ? 'ip-row active' : 'ip-row';
+
+        const dot = document.createElement('span');
+        dot.className = 'ip-dot';
+        dot.title = isActive ? 'Answering now' : 'Not answering';
+        row.appendChild(dot);
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'settings-input ip-input';
+        // 'url' keeps letters available for a hostname; 'decimal' would not
+        input.inputMode = 'url';
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        input.placeholder = '192.168.1.25';
+        input.value = ip || '';
+        row.appendChild(input);
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'icon-btn ip-remove';
+        remove.title = 'Remove address';
+        remove.setAttribute('aria-label', 'Remove address');
+        remove.textContent = '×';
+        row.appendChild(remove);
+
+        return row;
+    }
+
+    /**
+     * Append an empty row and put the cursor in it.
+     */
+    addEmptyIpRow() {
+        const list = this.elements.deviceIpList;
+        if (!list) return;
+
+        const row = this.buildIpRow('', false);
+        list.appendChild(row);
+        row.querySelector('.ip-input')?.focus();
+    }
+
+    /**
+     * Move the "in use" marker without redrawing (which would drop focus).
+     * @param {string|null} activeIp
+     */
+    markActiveIp(activeIp) {
+        const rows = this.elements.deviceIpList?.querySelectorAll('.ip-row') || [];
+
+        for (const row of rows) {
+            const input = row.querySelector('.ip-input');
+            const isActive = !!activeIp && !!input && input.value.trim() === activeIp;
+            row.classList.toggle('active', isActive);
+
+            const dot = row.querySelector('.ip-dot');
+            if (dot) dot.title = isActive ? 'Answering now' : 'Not answering';
+        }
+    }
+
+    /**
+     * Addresses currently typed in the panel, blanks dropped.
+     * @returns {string[]}
+     */
+    getDeviceIpsFromUI() {
+        const inputs = this.elements.deviceIpList?.querySelectorAll('.ip-input') || [];
+        return Array.from(inputs).map(input => input.value.trim()).filter(Boolean);
     }
 
     updateFolderLabel(folderName) {
@@ -222,7 +325,7 @@ export class UIManager {
     getSettingsFromUI() {
         return {
             firmwareType: this.elements.firmwareTypeSelect.value,
-            deviceIp: this.elements.deviceIpInput.value.trim(),
+            deviceIps: this.getDeviceIpsFromUI(),
             targetFolder: this.elements.targetFolderInput.value.trim()
         };
     }

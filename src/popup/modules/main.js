@@ -14,7 +14,7 @@ class PopupController {
         this.ui = new UIManager();
         this.fileManager = new FileManager();
         this.articleManager = new ArticleManager();
-        this.settings = { firmwareType: 'crosspoint', deviceIp: '172.16.24.159', settingsPanelOpen: false, organizeByDate: false, targetFolder: 'send-to-x3' };
+        this.settings = { firmwareType: 'crosspoint', deviceIp: '172.16.24.159', deviceIps: ['172.16.24.159', '192.168.1.25'], settingsPanelOpen: false, organizeByDate: false, targetFolder: 'send-to-x3' };
         this.currentSort = 'newest'; // Default sort
         this.queueItems = [];
         this.sendingQueue = false;
@@ -36,7 +36,9 @@ class PopupController {
             onStopQueue: () => { this.stopQueueRequested = true; this.ui.setQueueProgress('Stopping after the current transfer…'); },
             onOrganizeByDate: (event) => this.handleOrganizeByDate(event),
             onSettingsChange: (e) => this.handleSettingsChange(e),
-            onIpChange: (e) => this.handleIpChange(e),
+            onIpChange: () => this.handleIpListChange(),
+            onIpRemove: () => this.handleIpListChange(),
+            onAddIp: () => this.ui.addEmptyIpRow(),
             onTargetFolderChange: (e) => this.handleTargetFolderChange(e),
             onConnect: () => this.handleConnect(),
             onRefreshDevice: () => this.handleDeviceRefresh(),
@@ -76,6 +78,7 @@ class PopupController {
                 const allSettings = await window.Settings.getAll();
                 this.settings.firmwareType = allSettings.firmwareType;
                 this.settings.deviceIp = allSettings.deviceIp;
+                this.settings.deviceIps = allSettings.deviceIps;
                 this.settings.settingsPanelOpen = allSettings.settingsPanelOpen;
                 this.settings.organizeByDate = allSettings.organizeByDate;
                 this.settings.targetFolder = allSettings.targetFolder;
@@ -126,7 +129,18 @@ class PopupController {
 
         if (result.connected) {
             this.deviceConnected = true;
+
+            // Whichever address answered becomes the one we talk to, and the
+            // first one probed next time
+            if (result.ip && result.ip !== this.settings.deviceIp) {
+                this.settings.deviceIp = result.ip;
+                if (window.Settings) {
+                    await window.Settings.setActiveDeviceIp(result.ip);
+                }
+            }
+
             this.ui.showDeviceConnected(this.settings.deviceIp);
+            this.ui.markActiveIp(this.settings.deviceIp);
 
             // Load files
             const files = await this.fileManager.loadFolderFiles(this.settings);
@@ -137,6 +151,7 @@ class PopupController {
         } else {
             this.deviceConnected = false;
             this.ui.showDeviceDisconnected();
+            this.ui.markActiveIp(null);
             if (force) this.ui.setConnectButtonState('error');
             return false;
         }
@@ -152,9 +167,10 @@ class PopupController {
         if (window.Settings) {
             await window.Settings.setFirmwareType(newFirmwareType);
 
-            // Reload settings to get the stored IP for this firmware type
+            // Reload settings to get the stored addresses for this firmware type
             const updatedSettings = await window.Settings.getAll();
             this.settings.deviceIp = updatedSettings.deviceIp;
+            this.settings.deviceIps = updatedSettings.deviceIps;
 
             // Re-update UI to reflect the correct IP
             this.ui.updateSettingsUI(this.settings);
@@ -164,16 +180,33 @@ class PopupController {
         await this.checkDevice();
     }
 
-    async handleIpChange(event) {
-        const newIp = event.target.value.trim();
-        if (!newIp) return;
-
-        this.settings.deviceIp = newIp;
+    /**
+     * Persist whatever addresses the panel currently shows.
+     * @returns {Promise<void>}
+     */
+    async saveIpList() {
+        const ips = this.ui.getDeviceIpsFromUI();
 
         if (window.Settings) {
-            await window.Settings.setDeviceIp(newIp);
+            await window.Settings.setDeviceIps(ips);
+            // Read back rather than trust the write: emptying the list brings
+            // the defaults back, and the panel has to show that
+            this.settings.deviceIps = await window.Settings.getDeviceIps();
+            this.settings.deviceIp = await window.Settings.getDeviceIp();
+        } else {
+            this.settings.deviceIps = ips;
+            this.settings.deviceIp = ips[0] || this.settings.deviceIp;
         }
-        console.log('[Popup Controller] IP saved:', newIp);
+
+        // Redraw so a pasted URL shows up in the form we actually stored.
+        // Safe here: 'change' fires on blur, so no field has focus.
+        this.ui.renderDeviceIps(this.settings.deviceIps, this.settings.deviceIp);
+        console.log('[Popup Controller] Device addresses saved:', this.settings.deviceIps);
+    }
+
+    async handleIpListChange() {
+        await this.saveIpList();
+        await this.checkDevice();
     }
 
     async handleTargetFolderChange(event) {
@@ -203,12 +236,8 @@ class PopupController {
     }
 
     async handleConnect() {
-        // Force save current input value first
-        const currentInput = this.ui.getSettingsFromUI().deviceIp;
-        if (currentInput && currentInput !== this.settings.deviceIp) {
-            await this.handleIpChange({ target: { value: currentInput } });
-        }
-
+        // Save whatever is typed before probing it
+        await this.saveIpList();
         await this.checkDevice(true);
     }
 

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Send to X3",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "author": "Xatpy",
   "description": "Send articles from any website to an Xteink X3 e-ink reader as EPUB",
   "permissions": [
@@ -29,6 +29,7 @@
       "src/epub/epub_builder.js",
       "src/upload/x4_upload_tab.js",
       "src/upload/crosspoint_upload.js",
+      "src/utils/device_ips.js",
       "src/utils/settings.js",
       "src/background/service_worker.js"
     ]

@@ -68,7 +68,7 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
  * Handle fetch proxy (to bypass CORS/Mixed Content in popup)
  */
 async function handleFetch(payload) {
-    const { url, options } = payload;
+    const { url, options, timeoutMs } = payload;
     console.log('[X4 SW] Proxy fetch:', url, options?.method || 'GET');
 
     // Firefox Fallback: Use XMLHttpRequest to bypass potential Mixed Content/Fetch quirks
@@ -77,6 +77,10 @@ async function handleFetch(payload) {
         return new Promise((resolve) => {
             const xhr = new XMLHttpRequest();
             xhr.open(options?.method || 'GET', url, true);
+
+            if (timeoutMs) {
+                xhr.timeout = timeoutMs;
+            }
 
             // Set headers
             if (options?.headers) {
@@ -127,8 +131,11 @@ async function handleFetch(payload) {
     }
 
     // Chrome / Service Worker: Use fetch
+    const controller = timeoutMs ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
     try {
-        const response = await fetch(url, options);
+        const response = await fetch(url, controller ? { ...options, signal: controller.signal } : options);
 
         // We need to read the body to send it back
         const contentType = response.headers.get('content-type');
@@ -150,8 +157,12 @@ async function handleFetch(payload) {
         console.error('[X4 SW] Fetch error:', error);
         return {
             success: false,
-            error: error.message
+            error: error.name === 'AbortError' ? 'Timeout' : error.message
         };
+    } finally {
+        if (timer) {
+            clearTimeout(timer);
+        }
     }
 }
 
