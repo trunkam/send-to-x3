@@ -48,3 +48,6 @@ web-ext-artifacts/
 
 # Piano di lavoro locale: contiene dati di rete personali
 PLAN.md
+
+# Stato locale della firma AMO: lo riscrive ogni "web-ext sign"
+.amo-upload-uuid
