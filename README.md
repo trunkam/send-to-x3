@@ -1,195 +1,203 @@
-# Send to X4
+# Send to X3
 
-A browser extension to send long-form articles from the web directly to your **Xteink X4** e-ink reader as clean EPUB files.
+Send the article you are reading to an **Xteink X3** running **CrossPoint**
+firmware, as a clean EPUB, over Wi-Fi.
 
-> Status: **Stable (v1.2.3)** — Tested with Xteink X4
+This is a Gecko fork of **[Xatpy/send-to-x4](https://github.com/Xatpy/send-to-x4)**
+(MIT). The upstream extension is excellent and runs on Chrome, Edge and Firefox
+desktop. This fork exists for one thing it does not do: **run on Firefox for
+Android**, so the phone in your pocket can send to the reader clipped to its
+back.
+
+> Status: **in daily use** — v1.3.3, signed, running on a Galaxy S23 with
+> Firefox 153 against an X3 on CrossPoint 1.5.0.
 >
-> Supports: **Chrome** • **Firefox** • **Edge**
-
-
-<p align="center">
-  <img src="media/screenshot_popup.png" alt="Extension Popup" width="300">
-</p>
-
-<p align="center">
-  <img src="media/infographic.jpg" alt="How Send to X4 Works" width="600">
-</p>
+> If you have an **X4**, or you are on a desktop, use
+> [the original](https://github.com/Xatpy/send-to-x4) instead. Nothing here
+> improves on it for that case.
 
 ---
 
-## What is this?
+## Why an extension, and not an app
 
-**Send to X4** is a small, offline-first utility that helps you move reading-focused content from the web to your Xteink X4 with minimal friction.
+Extraction happens inside the page you already have open — rendered, and logged
+in. That is the whole point: **articles behind a paywall you pay for come
+through whole**, because nothing is re-fetched from a server that isn't you.
+An app or a read-later service has to fetch the URL itself, and gets the
+paywall.
 
-It is designed for people who:
-- prefer reading on e-ink
-- want distraction-free, offline reading
-- don't want accounts, sync services, or cloud storage
+It also sidesteps mixed-content blocking: a page served over HTTPS cannot POST
+to the reader over plain HTTP, but an extension can.
 
-![Send to X4 Demo](media/send-to-x4-1_1_0-crosspoint.gif)
-
----
-
-## Features
-  
-  - 📤 **Send to X4** — One-click conversion and upload to your Xteink X4
-  - 📖 **Long-form article support** — Optimized for reading-oriented pages
-  - 🧵 **Twitter/X Thread Support** — Captures full threads (original author only) and "Long Posts"
-  - 🤖 **CrossPoint Firmware Ready** — Supports both Stock and CrossPoint firmware with custom IPs
-  - 💾 **Offline-first & local** — No accounts, no servers, no tracking
-  - 📥 **EPUB download fallback** — Keep a local copy if needed
-  - 🗂️ **Advanced File Management** — View, sort, and delete files directly on the device
-  - 🗂️ **Transfer Queue** — Save article snapshots and compatible local files while online, then send them together after joining X4 WiFi
-  - 📦 **Local File Transfer** — Send existing `.epub`, `.txt`, and `.xtc` files unchanged
-  - 📅 **Optional Date Folders** — Keep future uploads in daily subfolders under `send-to-x4/`
-  
-  ---
-  
-  ## Installation
-  
-  1. Open Chrome and go to `chrome://extensions/`
-  2. Enable **Developer mode** (toggle in the top-right corner)
-  3. Click **Load unpacked**
-  4. Select the `send-to-x4` folder
-  5. Pin the extension for easy access
-  
-  ---
-  
-  ## Usage
-  
-  ### Sending an Article
-  
-  1. **Load the article**  
-     Open a long-form article, reading-focused page, or Twitter thread while connected to the internet.
-  
-  2. **Connect to X4**  
-     Switch your computer's WiFi to the Xteink X4 hotspot.
-  
-  3. **Open the extension**  
-     Click the **Send to X4** icon in the Chrome toolbar.
-  
-  4. **Send**  
-     Click **Send to X4** to upload the EPUB, or **Download** to save it locally.
-  
-  ### Managing Device Files
-  
-  The extension now provides a full file manager for your X4:
-  - **View All Files**: Scrollable list of content on the device.
-  - **Sort**: Organize by **Date (Newest/Oldest)** or **Name (A-Z)**.
-  - **Delete**: Remove old files to free up space.
-  
-  ---
-  
-  ## Twitter/X Support
-  
-  Send to X4 has specialized logic for X.com:
-  - **Smart Thread Extractor**: Automatically detects threads and stitches together tweets from the *original author only*, filtering out noise.
-  - **Twitter Articles**: Full support for "Long Posts" / Notes.
-  - **Clean Output**: Formatted specifically for e-ink readability.
-  
-  ---
-  
-  ## Workflow (Important)
-  
-  Send to X4 works best as a simple two-step ritual:
-  
-  1. ✅ Load the article while connected to the internet  
-  2. ✅ Switch to the X4 WiFi hotspot  
-  3. ✅ Open the popup and send  
-  4. ❌ Do not refresh the page while connected to the X4 hotspot
-
-### Transfer Queue
-
-Use **Queue** while browsing on normal internet WiFi. The extension stores a local article snapshot, so it does not need to re-fetch the source after you connect to the X4 hotspot. You can also add existing EPUB, TXT, and XTC files with **Add files**; imported files are transferred unchanged.
-
-When ready, join the X4 WiFi and click **Send all**. Keep the popup open during a batch transfer. Failed items remain in the local queue and can be retried; queued uploads never fall back to a browser download.
-
-Enable **Organize new uploads by date** in Settings to place new files in `send-to-x4/YYYY-MM-DD/`. It is off by default and existing flat files remain untouched.
-  
-  ---
-  
-  ## Technical Details
-  
-  - **Chrome Extension**: Manifest V3
-  - **Permissions**: `scripting`, `activeTab`, `downloads`, `tabs`, `storage`
-  - **Host Permissions**: `<all_urls>` (for images/updates), `http://192.168.3.3/*`, `http://192.168.4.1/*`
-  - **Article extraction**: Mozilla Readability.js + Custom Twitter Extractor
-  - **EPUB generation**: JSZip (in-browser) + XHTML Validation
-  - **Firmware Support**: Stock (192.168.3.3) & CrossPoint (192.168.4.1) + Custom IPs
-  
-  ---
-  
-  ## EPUB Output
-  
-  - **Filename**: `Title - Author - Source - Date.epub`
-  - **Location on X4**: `/send-to-x4/`
-  - **Content**: Clean XHTML with metadata (Title, Author, Source URL)
-  - **Images**: Disabled by default for X4 compatibility (codebase supports it)
-  
-  ---
-  
-  ## Troubleshooting
-  
-  ### "No article detected"
-  - The page must contain enough long-form text
-  - Try waiting a few seconds for dynamic pages to load
-  - Some highly dynamic sites may not extract well
-  
-  ### "Not connected to X4"
-  - Make sure you are connected to the X4 WiFi hotspot
-  - Check your **Settings** block in the popup to ensure the **IP Address** matches your device or firmware type.
-  - Open the device IP (e.g., `http://192.168.4.1/`) in your browser to verify connectivity.
-  
-  ### "Extension context invalidated"
-  - Reload the extension from `chrome://extensions/`
-  - Reload the article page while on internet WiFi
-  - Switch back to the X4 hotspot and try again
-  
-  ---
-  
-  ## Known Limitations
-  
-  - Text-only (images are temporarily disabled)
-  - Requires manual WiFi switching
-  - Works best on long-form, reading-oriented pages
-  - Not a read-later service or cloud sync tool
+**Why Firefox**: Chrome for Android does not support extensions at all — the
+code that handles them is not compiled into the Android build.
 
 ---
 
-## Installation
+## What this fork changes
 
-### Chrome / Edge
+| | |
+|---|---|
+| **Runs under Gecko** | The manifest declares `background.scripts` alongside `background.service_worker`. Firefox ignores the latter, so without it the extension does not start *at all* — it does not degrade, it never runs. Chrome ignores the former, so the upstream build is unaffected. |
+| **Android-shaped popup** | On Android the popup fills the screen instead of being a small window: no fixed 400px column, touch targets around 44px, scroll areas sized to the viewport. |
+| **Several device addresses** | The single IP field became a list. All addresses are probed **in parallel** when the popup opens and the one that answers is used, and remembered. Changing network — home Wi-Fi, phone hotspot — needs no switching by hand. |
+| **Date at the front of the filename** | Files arrive as `08-27 Title… - 2026-08-27.epub`. The device's file list truncates long names, so what sits at the end cannot be seen. Two digits, zero-padded, because the firmware sorts names as strings. |
+| **Imports HTML** | `📂 Add files` now takes raw `.html` and converts it to EPUB, on top of the `.epub`/`.txt`/`.xtc` it already forwarded unchanged. This is what lets articles saved on other devices reach the reader — see below. |
+| **X3 and CrossPoint by default** | Naming, destination folder (`send-to-x3/`), and firmware default. Error messages rewritten: the old ones told you to join the device's hotspot, which is the wrong advice here. |
 
-1. Open Chrome/Edge and go to `chrome://extensions/` or `edge://extensions/`
-2. Enable **Developer mode** (toggle in the top-right corner)
-3. Click **Load unpacked**
-4. Select the `send-to-x4` folder
-5. Pin the extension for easy access
+---
 
-### Firefox Desktop
+## Collecting articles from other devices
 
-1. Open Firefox and go to `about:debugging#/runtime/this-firefox`
-2. Click **Load Temporary Add-on**
-3. Navigate to the `send-to-x4` folder and select `manifest.json`
-4. The extension will remain loaded until you restart Firefox
+An extension cannot watch a folder — no filesystem access, no API, and on
+Firefox for Android not even `file://`. So there is no background automation
+here: importing is something you do, on purpose, in one tap.
+
+What works, with no server and no account, is a synced folder as a drop box:
+
+- **PC** — the upstream extension's *Download* button, pointed at a synced
+  folder.
+- **iPad** — an iOS Shortcut built on *Get article from web page*: it reads the
+  rendered article (paywalls included, same reason as above), turns it into
+  HTML, and saves it to that folder.
+- **Phone** — `📂 Add files` reaches the folder through the system file picker
+  (Dropbox, Drive and Files all show up as document providers), and everything
+  goes to the device with **Send all**.
+
+HTML is converted on the way in: charts (`<svg>`) are dropped, the title is
+taken from the `<h1>`, and the result is packaged as EPUB exactly like an
+article extracted in the browser — same filename, same date folder.
+
+---
+
+## Installing
+
+Firefox for Android will only install a **signed** extension, and the signed
+build here is *unlisted* — it is tied to this author's Mozilla account, so the
+`.xpi` in `web-ext-artifacts/` will not install for you. You have to sign your
+own, which is free:
+
+1. Get an API key at
+   [addons.mozilla.org/developers/addon/api/key](https://addons.mozilla.org/developers/addon/api/key/).
+   The secret is shown **once**.
+2. Copy `.env.example` to `.env` and paste the two keys in. `.env` is gitignored.
+3. Change the extension id in `manifest.json`
+   (`browser_specific_settings.gecko.id`) to something of your own — the id here
+   is already registered to this author and signing will be refused.
+4. ```bash
+   npm install
+   npx web-ext sign --channel=unlisted
+   ```
+5. Open the resulting `.xpi` from Firefox on the phone and install it.
+
+**On desktop**, for development, no signing is needed:
+
+```bash
+npx web-ext run          # opens a clean Firefox with the extension loaded
+```
+
+Note that a desktop popup closes when a file dialog opens, which makes
+`📂 Add files` untestable from the panel. Open the popup as a tab instead —
+`moz-extension://<uuid>/src/popup/popup.html`, the uuid being in the temporary
+profile's `prefs.js`.
+
+---
+
+## Using it
+
+Three buttons, not one:
+
+| | |
+|---|---|
+| **📖 Send to X3** | Immediate send. **Disabled when the device does not answer** — that is deliberate, not a bug. |
+| **➕ Queue** | Stores the article. This is what you want when the reader is off. |
+| **📥 Download** | Saves the EPUB locally. |
+
+**Queue extracts and stores the article there and then** — it is a snapshot, not
+a link to re-fetch later. That is why it works on paywalled pages, and why it
+survives closing the popup, closing Firefox, and rebooting the phone. The EPUB
+is built at send time.
+
+With the device on, **📤 Send all**. Keep the popup open during a batch: it is
+the popup that drives the transfer. Close it and the queue stops; reopen it and
+interrupted items are recovered.
+
+**The queue does not start by itself.** Nothing notices that the reader has been
+switched on, and finding out would mean polling the network in the background —
+battery and permissions in exchange for one tap.
+
+### The setup this is built around
+
+The **phone is the hotspot** and the X3 joins it. The advantage is that the
+phone keeps its mobile data while sharing, so you browse and send at the same
+moment. With the hotspot coming from the reader instead, you land on a network
+with no internet and have to extract first, send later.
+
+Both addresses — the hotspot one and the home LAN one — live in the Settings
+list, and the extension picks whichever answers.
+
+---
+
+## Under the hood
+
+- Manifest V3, with `background.scripts` for Gecko and `background.service_worker`
+  for Chromium. Script order matters: classic scripts share one lexical scope in
+  manifest order.
+- `gecko_android.strict_min_version` is **142**, the first version that supports
+  `data_collection_permissions`.
+- Article extraction: Mozilla Readability, injected on demand.
+- EPUB generation: JSZip, in the browser.
+- CrossPoint API (read from the source, not from memory): `POST /upload`,
+  `GET /api/files`, `POST /mkdir`, `POST /delete`, on port 80, no auth.
+- Tests: `npm test` (Node's built-in runner, no dependencies).
+
+The IndexedDB database is still named `send-to-x4-transfer-queue`, and the
+internal message types are still `X4_*`. Renaming them would orphan existing
+queues for no visible gain.
+
+---
+
+## Twitter/X support
+
+Inherited from upstream and untouched: threads are stitched together from the
+original author only, and "Long Posts" / Notes are supported.
+
+---
+
+## Troubleshooting
+
+**"No article detected"** — the page needs enough long-form text; give dynamic
+pages a few seconds.
+
+**The device does not answer** — check the address list in Settings; the green
+dot marks the one that responded. Open `http://<address>/` in a browser to
+confirm. On a phone hotspot the address comes from DHCP and *can* change: that
+is the first thing to suspect when sending fails for no apparent reason.
+
+**The popup does not open at all on Android** — occasionally, and not because of
+this code: the popup is opened by Firefox, and none of this runs until it is on
+screen. The likely cause is the separate process Gecko runs extensions in being
+killed by Android under memory pressure. Setting Firefox's battery usage to
+"Unrestricted" in Android settings is worth trying.
+
+---
+
+## Limitations
+
+- Text only; images are disabled.
+- Importing files is a manual step, and cannot be anything else from within an
+  extension.
+- Not a read-later service, and not cloud sync.
 
 ---
 
 ## Acknowledgements
 
-- **[borisfaure](https://github.com/borisfaure)** — For implementing CrossPoint firmware support ([PR #2](https://github.com/Xatpy/send-to-x4/pull/2))
-
----
+- **[Xatpy](https://github.com/Xatpy)** — for the extension this forks. Almost
+  everything here is theirs.
+- **[borisfaure](https://github.com/borisfaure)** — for CrossPoint firmware
+  support ([PR #2](https://github.com/Xatpy/send-to-x4/pull/2)).
 
 ## License
 
-MIT
-
----
-
-## Legacy / History
-
-Archive of previous versions and demonstrations.
-
-### v1.0 (Original Release)
-![Send to X4 v1.0 Demo](media/demo.gif)
+MIT, as upstream.
