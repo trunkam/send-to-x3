@@ -10,7 +10,7 @@ module.exports = {
         'package.json',
         'package-lock.json',
         'web-ext-config.cjs',
-        'PLAN.md',
+        'PLAN*.md',
         '.env',
         '.env.example',
         'src/popup/popup.old.js'

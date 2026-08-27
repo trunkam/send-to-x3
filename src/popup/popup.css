@@ -716,8 +716,15 @@ body {
 
 /* Firefox for Android
    The popup is not a small window here: it fills the screen. Desktop's fixed
-   400px column and short scroll areas have to give way to the viewport. */
-@media (max-width: 480px) {
+   400px column and short scroll areas have to give way to the viewport.
+
+   The touch test is not decoration. On desktop the popup is 400px wide, which
+   is already under this breakpoint, so these rules used to apply there too —
+   and there the panel sizes itself to its content while the content sizes
+   itself to the panel through vh, which makes Firefox resize it forever
+   (visible as flicker). Android fills a screen of fixed size, so the loop
+   cannot start. */
+@media (max-width: 480px) and (pointer: coarse) {
     body {
         min-width: 0;
         max-width: 100%;

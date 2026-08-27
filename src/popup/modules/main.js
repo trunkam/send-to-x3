@@ -292,16 +292,35 @@ class PopupController {
     }
 
     async handleImportFiles(event) {
-        try {
-            const files = Array.from(event.target.files || []);
-            if (files.length) await addFiles(files);
-            await this.refreshQueue();
-            this.ui.setQueueProgress(files.length ? `${files.length} file${files.length === 1 ? '' : 's'} added to the queue.` : '');
-        } catch (error) {
-            this.ui.setQueueProgress(error.message);
-        } finally {
-            event.target.value = '';
+        const files = Array.from(event.target.files || []);
+        event.target.value = '';
+        if (!files.length) return;
+
+        let added = 0;
+        const failures = [];
+        // One file at a time: a single unsupported pick used to discard the whole
+        // selection, and the shared folder is imported in batches.
+        for (const file of files) {
+            try {
+                if (HtmlArticle.isHtmlFilename(file.name)) {
+                    // Raw HTML from the iPad Shortcut: queue it as an article, so it
+                    // gets the same EPUB, filename and date folder as an extracted page.
+                    await addArticle(HtmlArticle.parse(await file.text(), {
+                        filename: file.name,
+                        date: TransferUtils.dateFolder(new Date(file.lastModified || Date.now()))
+                    }));
+                } else {
+                    await addFiles([file]);
+                }
+                added++;
+            } catch (error) {
+                failures.push(`${file.name}: ${error.message}`);
+            }
         }
+
+        await this.refreshQueue();
+        const summary = added ? `${added} file${added === 1 ? '' : 's'} added to the queue.` : '';
+        this.ui.setQueueProgress([summary, ...failures].join(' ').trim());
     }
 
     async handleRemoveQueueItem(item) {
