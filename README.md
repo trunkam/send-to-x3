@@ -5,16 +5,24 @@ firmware, as a clean EPUB, over Wi-Fi.
 
 This is a Gecko fork of **[Xatpy/send-to-x4](https://github.com/Xatpy/send-to-x4)**
 (MIT). The upstream extension is excellent and runs on Chrome, Edge and Firefox
-desktop. This fork exists for one thing it does not do: **run on Firefox for
-Android**, so the phone in your pocket can send to the reader clipped to its
-back.
+desktop. This fork started from the one thing it does not do: **run on Firefox
+for Android**, so the phone in your pocket can send to the reader clipped to its
+back. It has since grown a few things of its own.
 
 > Status: **in daily use** — v1.3.3, signed, running on a Galaxy S23 with
 > Firefox 153 against an X3 on CrossPoint 1.5.0.
->
-> If you have an **X4**, or you are on a desktop, use
-> [the original](https://github.com/Xatpy/send-to-x4) instead. Nothing here
-> improves on it for that case.
+
+**On an X4 this should work just as well.** The CrossPoint HTTP API is the same
+on both readers and an EPUB is an EPUB; only the naming here says X3. Two things
+are worth having whichever reader you own: it **converts HTML to EPUB** on
+import, and it holds a **list of device addresses** rather than one, probing
+them in parallel and using whichever answers — so moving between a home network
+and a phone hotspot needs nothing switched by hand.
+
+Said plainly: it is **tested on an X3 with CrossPoint, and nowhere else**. Stock
+firmware and the X4 are inherited from upstream and untouched, not verified
+here. Upstream is also the maintained one — this fork tracks a personal need and
+will lag behind it.
 
 ---
 
