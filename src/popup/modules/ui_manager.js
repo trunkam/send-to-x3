@@ -15,6 +15,7 @@ export class UIManager {
             articleLoading: document.getElementById('article-loading'),
             articleFound: document.getElementById('article-found'),
             articleNotFound: document.getElementById('article-not-found'),
+            articleNotFoundDetail: document.getElementById('article-not-found-detail'),
             articleError: document.getElementById('article-error'),
             articleTitle: document.getElementById('article-title'),
             articleAuthor: document.getElementById('article-author'),
@@ -111,11 +112,19 @@ export class UIManager {
         this.elements.articleWords.textContent = `${article.wordCount?.toLocaleString() || '—'} words`;
     }
 
-    showArticleNotFound() {
+    showArticleNotFound(detail = null) {
         this.elements.articleLoading.classList.add('hidden');
         this.elements.articleFound.classList.add('hidden');
         this.elements.articleError.classList.add('hidden');
         this.elements.articleNotFound.classList.remove('hidden');
+
+        // There is no console to consult on Android, so say what the page
+        // actually offered rather than leaving a bare "no article".
+        const detailEl = this.elements.articleNotFoundDetail;
+        if (detailEl) {
+            detailEl.textContent = detail || '';
+            detailEl.classList.toggle('hidden', !detail);
+        }
     }
 
     showArticleError(message) {

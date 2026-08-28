@@ -175,11 +175,16 @@ export function extractArticle() {
             return `${year}-${month}-${day}`;
         };
 
+        // Kept so a failure can say how far each stage got: the popup has no
+        // console on Android, so the reason has to travel back with the result.
+        let readabilityLength = null;
+
         if (hasReadability) {
             // Use Readability
             const docClone = document.cloneNode(true);
             const reader = new Readability(docClone);
             const article = reader.parse();
+            readabilityLength = article?.textContent?.length ?? 0;
 
             if (article && article.textContent && article.textContent.length >= 400) {
                 title = article.title || document.title;
@@ -223,18 +228,44 @@ export function extractArticle() {
         // Fallback: basic extraction
         console.log('[X4] Using fallback extraction');
 
-        // Get main content area
-        const mainContent = document.querySelector('article') ||
-            document.querySelector('[role="main"]') ||
-            document.querySelector('main') ||
-            document.body;
+        // Get main content area. Taking the first <article> is not enough: news
+        // sites drop "read also" boxes into the body, and those are <article>
+        // elements holding a couple of lines each, while the real text sits in
+        // <main> split across many small containers. So weigh the candidates and
+        // keep the narrowest one that still holds nearly all of the text — that
+        // is the one carrying the least navigation around the article.
+        const candidates = [
+            ...document.querySelectorAll('article'),
+            ...document.querySelectorAll('[role="main"]'),
+            ...document.querySelectorAll('main')
+        ].map((el) => ({ el, length: (el.innerText || el.textContent || '').length }))
+            .filter((candidate) => candidate.length > 0);
+
+        const longest = candidates.reduce((max, c) => Math.max(max, c.length), 0);
+        let mainContent = document.body;
+        if (longest >= 400) {
+            mainContent = candidates
+                .filter((candidate) => candidate.length >= longest * 0.8)
+                .reduce((narrowest, candidate) => (candidate.length < narrowest.length ? candidate : narrowest))
+                .el;
+        }
 
         textContent = mainContent.innerText || mainContent.textContent || '';
         wordCount = textContent.split(/\s+/).length;
 
+        console.log('[X4] Fallback container:', mainContent.tagName, textContent.length, 'chars');
+
         if (textContent.length < 400) {
             console.log('[X4] Content too short:', textContent.length);
-            return { success: false, reason: 'content_too_short', length: textContent.length };
+            const readabilityNote = !hasReadability
+                ? 'Readability did not load'
+                : `Readability returned ${readabilityLength} characters`;
+            return {
+                success: false,
+                reason: 'content_too_short',
+                length: textContent.length,
+                detail: `${readabilityNote}; the largest block on this page holds ${textContent.length} characters (400 needed).`
+            };
         }
 
         // Get metadata
@@ -269,6 +300,6 @@ export function extractArticle() {
 
     } catch (error) {
         console.error('[X4] Extraction error:', error);
-        return { success: false, reason: error.message };
+        return { success: false, reason: error.message, detail: `Extraction failed: ${error.message}` };
     }
 }

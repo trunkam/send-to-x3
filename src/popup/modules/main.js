@@ -103,9 +103,9 @@ class PopupController {
             if (article) {
                 this.ui.showArticleFound(article);
             } else {
-                // Determine if it was an error or just not found? 
+                // Determine if it was an error or just not found?
                 // ArticleManager returns null on "not found" (e.g. too short).
-                this.ui.showArticleNotFound();
+                this.ui.showArticleNotFound(this.articleManager.lastFailureDetail);
             }
         } catch (error) {
             console.error('[Popup Controller] Article check failed:', error);

@@ -248,6 +248,13 @@ body {
     color: #52525b;
 }
 
+/* Why extraction came back empty: secondary to the hint above it. */
+.hint.detail {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #71717a;
+}
+
 /* Error Card */
 .error-card {
     text-align: center;

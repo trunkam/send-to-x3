@@ -10,6 +10,8 @@ const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 export class ArticleManager {
     constructor() {
         this.articleData = null;
+        // Why the last extraction came back empty, for the popup to display.
+        this.lastFailureDetail = null;
     }
 
     /**
@@ -57,9 +59,11 @@ export class ArticleManager {
 
             if (result && result.success) {
                 this.articleData = result.article;
+                this.lastFailureDetail = null;
                 return result.article;
             } else {
                 console.log('[Article Manager] No article found:', result?.reason);
+                this.lastFailureDetail = result?.detail || result?.reason || null;
                 return null;
             }
 
