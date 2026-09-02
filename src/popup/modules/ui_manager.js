@@ -49,8 +49,53 @@ export class UIManager {
             settingsHeader: document.getElementById('settings-header'),
             settingsContent: document.getElementById('settings-content'),
             settingsToggleIcon: document.getElementById('settings-toggle-icon'),
-            sortSelect: document.getElementById('sort-order')
+            sortSelect: document.getElementById('sort-order'),
+            dropboxSyncBtn: document.getElementById('dropbox-sync-btn'),
+            dropboxAutoSync: document.getElementById('dropbox-auto-sync'),
+            dropboxAppKeyInput: document.getElementById('dropbox-app-key'),
+            dropboxFolderInput: document.getElementById('dropbox-folder'),
+            dropboxSentLabel: document.getElementById('dropbox-sent-label'),
+            dropboxStatus: document.getElementById('dropbox-status'),
+            dropboxConnectBtn: document.getElementById('dropbox-connect-btn'),
+            dropboxDisconnectBtn: document.getElementById('dropbox-disconnect-btn'),
+            dropboxCodeRow: document.getElementById('dropbox-code-row'),
+            dropboxCodeInput: document.getElementById('dropbox-code'),
+            dropboxCodeSaveBtn: document.getElementById('dropbox-code-save-btn')
         };
+    }
+
+    /**
+     * Reflect the Dropbox connection in the settings panel.
+     * @param {{connected: boolean, folder?: string, sentFolder?: string, message?: string, awaitingCode?: boolean}} state
+     */
+    showDropboxState(state = {}) {
+        const connected = Boolean(state.connected);
+        if (this.elements.dropboxStatus) {
+            this.elements.dropboxStatus.textContent = state.message
+                || (connected ? 'Connected to Dropbox.' : 'Not connected.');
+        }
+        if (this.elements.dropboxConnectBtn) {
+            this.elements.dropboxConnectBtn.classList.toggle('hidden', connected);
+        }
+        if (this.elements.dropboxDisconnectBtn) {
+            this.elements.dropboxDisconnectBtn.classList.toggle('hidden', !connected);
+        }
+        if (this.elements.dropboxCodeRow) {
+            // The code box only makes sense between "Connect" and the paste.
+            this.elements.dropboxCodeRow.classList.toggle('hidden', !state.awaitingCode);
+        }
+        if (typeof state.folder === 'string' && this.elements.dropboxFolderInput) {
+            this.elements.dropboxFolderInput.value = state.folder;
+        }
+        if (typeof state.appKey === 'string' && this.elements.dropboxAppKeyInput) {
+            this.elements.dropboxAppKeyInput.value = state.appKey;
+        }
+        if (typeof state.sentFolder === 'string' && this.elements.dropboxSentLabel) {
+            this.elements.dropboxSentLabel.textContent = state.sentFolder;
+        }
+        if (typeof state.autoSync === 'boolean' && this.elements.dropboxAutoSync) {
+            this.elements.dropboxAutoSync.checked = state.autoSync;
+        }
     }
 
     setupListeners(handlers) {
@@ -58,6 +103,13 @@ export class UIManager {
         if (handlers.onDownload) this.elements.downloadBtn.addEventListener('click', handlers.onDownload);
         if (handlers.onQueueArticle) this.elements.queueArticleBtn.addEventListener('click', handlers.onQueueArticle);
         if (handlers.onImportFiles) this.elements.importFiles.addEventListener('change', handlers.onImportFiles);
+        if (handlers.onDropboxSync) this.elements.dropboxSyncBtn.addEventListener('click', handlers.onDropboxSync);
+        if (handlers.onDropboxAutoSyncChange) this.elements.dropboxAutoSync.addEventListener('change', handlers.onDropboxAutoSyncChange);
+        if (handlers.onDropboxConnect) this.elements.dropboxConnectBtn.addEventListener('click', handlers.onDropboxConnect);
+        if (handlers.onDropboxDisconnect) this.elements.dropboxDisconnectBtn.addEventListener('click', handlers.onDropboxDisconnect);
+        if (handlers.onDropboxCodeSave) this.elements.dropboxCodeSaveBtn.addEventListener('click', handlers.onDropboxCodeSave);
+        if (handlers.onDropboxFolderChange) this.elements.dropboxFolderInput.addEventListener('change', handlers.onDropboxFolderChange);
+        if (handlers.onDropboxAppKeyChange) this.elements.dropboxAppKeyInput.addEventListener('change', handlers.onDropboxAppKeyChange);
         if (handlers.onSendAll) this.elements.sendAllBtn.addEventListener('click', handlers.onSendAll);
         if (handlers.onStopQueue) this.elements.stopQueueBtn.addEventListener('click', handlers.onStopQueue);
         if (handlers.onOrganizeByDate) this.elements.organizeByDate.addEventListener('change', handlers.onOrganizeByDate);

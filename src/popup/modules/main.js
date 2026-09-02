@@ -20,6 +20,7 @@ class PopupController {
         this.sendingQueue = false;
         this.stopQueueRequested = false;
         this.deviceConnected = false;
+        this.dropboxSyncing = false;
     }
 
     async init() {
@@ -32,6 +33,13 @@ class PopupController {
             onDownload: () => this.handleDownload(),
             onQueueArticle: () => this.handleQueueArticle(),
             onImportFiles: (event) => this.handleImportFiles(event),
+            onDropboxSync: () => this.handleDropboxSync(),
+            onDropboxConnect: () => this.handleDropboxConnect(),
+            onDropboxDisconnect: () => this.handleDropboxDisconnect(),
+            onDropboxCodeSave: () => this.handleDropboxCodeSave(),
+            onDropboxFolderChange: (event) => this.handleDropboxFolderChange(event),
+            onDropboxAppKeyChange: (event) => this.handleDropboxAppKeyChange(event),
+            onDropboxAutoSyncChange: (event) => this.handleDropboxAutoSyncChange(event),
             onSendAll: () => this.handleSendAll(),
             onStopQueue: () => { this.stopQueueRequested = true; this.ui.setQueueProgress('Stopping after the current transfer…'); },
             onOrganizeByDate: (event) => this.handleOrganizeByDate(event),
@@ -68,8 +76,14 @@ class PopupController {
         await Promise.all([
             this.checkArticle(),
             this.checkDevice(),
-            this.refreshQueue()
+            this.refreshQueue(),
+            this.loadDropboxState()
         ]);
+        // After the state is on screen: may finish an authorisation started
+        // before the popup was closed by the consent tab.
+        await this.completeDropboxIfPossible();
+        // Not awaited: the popup stays responsive while Dropbox is contacted.
+        this.autoSyncDropboxIfEnabled();
     }
 
     async loadSettings() {
@@ -291,6 +305,26 @@ class PopupController {
         }
     }
 
+    /**
+     * Queue one file, whether it came from Android's picker or from Dropbox.
+     * Kept separate so both paths share the HTML/EPUB decision instead of
+     * drifting apart.
+     * @param {File} file
+     * @returns {Promise<void>} rejects with the reason the file could not be queued
+     */
+    async importOneFile(file) {
+        if (HtmlArticle.isHtmlFilename(file.name)) {
+            // Raw HTML from the iPad Shortcut: queue it as an article, so it
+            // gets the same EPUB, filename and date folder as an extracted page.
+            await addArticle(HtmlArticle.parse(await file.text(), {
+                filename: file.name,
+                date: TransferUtils.dateFolder(new Date(file.lastModified || Date.now()))
+            }));
+        } else {
+            await addFiles([file]);
+        }
+    }
+
     async handleImportFiles(event) {
         const files = Array.from(event.target.files || []);
         event.target.value = '';
@@ -302,16 +336,7 @@ class PopupController {
         // selection, and the shared folder is imported in batches.
         for (const file of files) {
             try {
-                if (HtmlArticle.isHtmlFilename(file.name)) {
-                    // Raw HTML from the iPad Shortcut: queue it as an article, so it
-                    // gets the same EPUB, filename and date folder as an extracted page.
-                    await addArticle(HtmlArticle.parse(await file.text(), {
-                        filename: file.name,
-                        date: TransferUtils.dateFolder(new Date(file.lastModified || Date.now()))
-                    }));
-                } else {
-                    await addFiles([file]);
-                }
+                await this.importOneFile(file);
                 added++;
             } catch (error) {
                 failures.push(`${file.name}: ${error.message}`);
@@ -321,6 +346,196 @@ class PopupController {
         await this.refreshQueue();
         const summary = added ? `${added} file${added === 1 ? '' : 's'} added to the queue.` : '';
         this.ui.setQueueProgress([summary, ...failures].join(' ').trim());
+    }
+
+    // --- Dropbox -----------------------------------------------------------
+
+    // Hours and minutes only: it is there to say "just now", not to timestamp.
+    clockTime() {
+        return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    async loadDropboxState(message) {
+        if (!window.Settings) return null;
+        const config = await window.Settings.getDropbox();
+        const pending = await window.Settings.getDropboxVerifier();
+        this.ui.showDropboxState({
+            connected: Boolean(config.refreshToken),
+            appKey: config.appKey,
+            folder: config.folder,
+            sentFolder: config.sentFolder,
+            autoSync: config.autoSync,
+            // The box stays open across popup closures, which is the only way
+            // this flow can work on Android.
+            awaitingCode: Boolean(pending) && !config.refreshToken,
+            message: message || (pending && !config.refreshToken
+                ? 'Waiting for the code from Dropbox. Paste it below.'
+                : undefined)
+        });
+        return config;
+    }
+
+    /* Opens Dropbox's consent page in a tab. On Firefox Android that closes the
+       popup, so the verifier is written to storage first: when the popup comes
+       back it is the only way to match the pasted code. It is cleared as soon as
+       it is spent, and expires by itself after half an hour. */
+    async handleDropboxAppKeyChange(event) {
+        await window.Settings.setDropboxConfig({ appKey: event.target.value });
+        await this.loadDropboxState('App key saved.');
+    }
+
+    async handleDropboxConnect() {
+        try {
+            const config = await window.Settings.getDropbox();
+            if (!config.appKey) {
+                await this.loadDropboxState('Enter your Dropbox app key first, from dropbox.com/developers/apps.');
+                return;
+            }
+            const verifier = DropboxClient.createVerifier();
+            await window.Settings.setDropboxVerifier(verifier);
+            const url = await DropboxClient.authorizeUrl(config.appKey, verifier);
+            await this.loadDropboxState('Authorise in the tab that opened, then reopen this popup and paste the code.');
+            await browserAPI.tabs.create({ url });
+        } catch (error) {
+            await this.loadDropboxState(`Could not start authorisation: ${error.message}`);
+        }
+    }
+
+    /* After consent Dropbox lands on authorize_success?auth_code=…, so the code
+       is sitting in a tab we are allowed to read. Saves the user copying a
+       40-character string on a phone. Returns '' when that tab is not there. */
+    async findDropboxCodeInTabs() {
+        try {
+            const tabs = await browserAPI.tabs.query({});
+            for (const tab of tabs) {
+                const url = tab.url || '';
+                if (url.includes('/oauth2/authorize_success') && url.includes('auth_code=')) {
+                    return new URL(url).searchParams.get('auth_code') || '';
+                }
+            }
+        } catch (error) {
+            console.error('[Popup Controller] Could not read tabs for the Dropbox code:', error);
+        }
+        return '';
+    }
+
+    // Runs on popup open: finishes the connection by itself when the consent
+    // tab is still around, so the paste box is only a fallback.
+    async completeDropboxIfPossible() {
+        if (!window.Settings) return;
+        const config = await window.Settings.getDropbox();
+        if (config.refreshToken) return;
+        if (!await window.Settings.getDropboxVerifier()) return;
+
+        const code = await this.findDropboxCodeInTabs();
+        if (!code) return;
+        await this.handleDropboxCodeSave(code);
+    }
+
+    async handleDropboxCodeSave(codeFromTab) {
+        const typed = this.ui.elements.dropboxCodeInput ? this.ui.elements.dropboxCodeInput.value : '';
+        const code = typeof codeFromTab === 'string' && codeFromTab ? codeFromTab : typed;
+        if (!code.trim()) {
+            await this.loadDropboxState('Paste the code Dropbox showed you first.');
+            return;
+        }
+        const verifier = await window.Settings.getDropboxVerifier();
+        if (!verifier) {
+            await this.loadDropboxState('That attempt has expired. Press Connect again.');
+            return;
+        }
+        try {
+            const config = await window.Settings.getDropbox();
+            const refreshToken = await DropboxClient.exchangeCode(config.appKey, code, verifier);
+            await window.Settings.setDropboxRefreshToken(refreshToken);
+            await window.Settings.setDropboxVerifier('');
+            if (this.ui.elements.dropboxCodeInput) this.ui.elements.dropboxCodeInput.value = '';
+            await this.loadDropboxState('Connected to Dropbox.');
+        } catch (error) {
+            await this.loadDropboxState(`Dropbox refused the code: ${error.message}`);
+        }
+    }
+
+    async handleDropboxDisconnect() {
+        await window.Settings.setDropboxRefreshToken('');
+        await window.Settings.setDropboxVerifier('');
+        await this.loadDropboxState('Disconnected. Files on Dropbox are untouched.');
+    }
+
+    async handleDropboxFolderChange(event) {
+        await window.Settings.setDropboxConfig({ folder: event.target.value });
+        await this.loadDropboxState('Folder saved.');
+    }
+
+    async handleDropboxAutoSyncChange(event) {
+        await window.Settings.setDropboxAutoSync(event.target.checked);
+        await this.loadDropboxState(event.target.checked
+            ? 'Dropbox will be checked when the popup opens.'
+            : 'Dropbox will only be checked when you press From Dropbox.');
+    }
+
+    /* Runs once the popup is on screen, and deliberately not awaited by init():
+       the window has to be usable straight away, even when Dropbox is slow or
+       the phone is offline. */
+    async autoSyncDropboxIfEnabled() {
+        if (!window.Settings) return;
+        const config = await window.Settings.getDropbox();
+        if (!config.autoSync || !config.refreshToken) return;
+        await this.handleDropboxSync({ auto: true });
+    }
+
+    /* Pulls whatever is waiting in the Dropbox folder into the queue. A file is
+       moved into the "sent" sub-folder only once it is safely queued, so a
+       failure here leaves it where it is and the next run tries again. */
+    async handleDropboxSync(options = {}) {
+        /* `auto` marks the run started on popup open. It only suppresses the
+           "connect it first" nudge, which would greet anyone who never set
+           Dropbox up. The outcome is always reported, empty folder included:
+           without it there is no telling a check that found nothing from a check
+           that never ran. */
+        const auto = Boolean(options.auto);
+        if (this.dropboxSyncing) return;
+        const config = await window.Settings.getDropbox();
+        if (!config.appKey || !config.refreshToken) {
+            if (!auto) this.ui.setQueueProgress('Connect Dropbox in Settings first.');
+            return;
+        }
+
+        this.dropboxSyncing = true;
+        try {
+            this.ui.setQueueProgress('Checking Dropbox…');
+            const token = await DropboxClient.accessTokenFrom(config.appKey, config.refreshToken);
+            const entries = await DropboxClient.list(token, config.folder);
+            if (!entries.length) {
+                this.ui.setQueueProgress(`Dropbox checked at ${this.clockTime()}: nothing new.`);
+                return;
+            }
+
+            let added = 0;
+            const failures = [];
+            for (const entry of entries) {
+                try {
+                    this.ui.setQueueProgress(`Downloading ${entry.name}…`);
+                    const blob = await DropboxClient.download(token, entry.path);
+                    await this.importOneFile(new File([blob], entry.name, { lastModified: entry.modified }));
+                    added++;
+                    // Only now is it safe to take it out of the way.
+                    await DropboxClient.moveToSent(token, entry, config.folder, config.sentFolder);
+                } catch (error) {
+                    failures.push(`${entry.name}: ${error.message}`);
+                }
+            }
+
+            await this.refreshQueue();
+            const summary = added
+                ? `${added} file${added === 1 ? '' : 's'} added from Dropbox at ${this.clockTime()}.`
+                : 'Nothing was imported.';
+            this.ui.setQueueProgress([summary, ...failures].join(' ').trim());
+        } catch (error) {
+            this.ui.setQueueProgress(`Dropbox check failed at ${this.clockTime()}: ${error.message}`);
+        } finally {
+            this.dropboxSyncing = false;
+        }
     }
 
     async handleRemoveQueueItem(item) {

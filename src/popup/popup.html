@@ -68,6 +68,7 @@
       <div class="button-group queue-actions">
         <label for="import-files" class="send-btn secondary"><span class="btn-icon">📂</span><span class="btn-text">Add files</span></label>
         <input id="import-files" type="file" multiple class="hidden">
+        <button id="dropbox-sync-btn" class="send-btn secondary"><span class="btn-icon">☁️</span><span class="btn-text">From Dropbox</span></button>
         <button id="send-all-btn" class="send-btn primary"><span class="btn-icon">📤</span><span class="btn-text">Send all</span></button>
         <button id="stop-queue-btn" class="send-btn secondary hidden"><span class="btn-icon">⏹</span><span class="btn-text">Stop</span></button>
       </div>
@@ -158,6 +159,27 @@
           <input type="text" id="target-folder" class="settings-input" placeholder="send-to-x3" value="send-to-x3">
           <p class="hint">EPUBs are saved to this folder on your X3. Renaming does not move existing files.</p>
         </div>
+
+        <div class="settings-sub-option">
+          <label class="input-label" for="dropbox-app-key">Dropbox app key</label>
+          <input type="text" id="dropbox-app-key" class="settings-input" placeholder="from dropbox.com/developers/apps">
+          <p class="hint">Create your own app there (Scoped access, Full Dropbox) and give it the permissions files.metadata.read, files.content.read and files.content.write.</p>
+
+          <label class="input-label" for="dropbox-folder">Dropbox folder</label>
+          <input type="text" id="dropbox-folder" class="settings-input" placeholder="AAA" value="AAA">
+          <p class="hint">Where the iPad and the PC drop their files. Imported files are moved into a "<span id="dropbox-sent-label">inviati</span>" sub-folder, never deleted.</p>
+          <label class="settings-sub-option checkbox-option"><input type="checkbox" id="dropbox-auto-sync" checked> Check Dropbox when the popup opens</label>
+          <p id="dropbox-status" class="hint">Not connected.</p>
+          <div class="button-group">
+            <button id="dropbox-connect-btn" class="send-btn secondary"><span class="btn-icon">🔗</span><span class="btn-text">Connect</span></button>
+            <button id="dropbox-disconnect-btn" class="send-btn secondary hidden"><span class="btn-icon">✖</span><span class="btn-text">Disconnect</span></button>
+          </div>
+          <div id="dropbox-code-row" class="hidden">
+            <label class="input-label" for="dropbox-code">Paste the code Dropbox showed you</label>
+            <input type="text" id="dropbox-code" class="settings-input" placeholder="authorization code">
+            <button id="dropbox-code-save-btn" class="send-btn secondary"><span class="btn-icon">✔</span><span class="btn-text">Finish connecting</span></button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -172,6 +194,7 @@
   <script src="../utils/settings.js"></script>
   <script src="../utils/transfer_utils.js"></script>
   <script src="../utils/html_article.js"></script>
+  <script src="../utils/dropbox_client.js"></script>
   <script type="module" src="modules/main.js"></script>
 </body>
 
