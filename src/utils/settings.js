@@ -16,6 +16,20 @@ const Settings = {
         ORGANIZE_BY_DATE: 'organizeByDate',
         TARGET_FOLDER: 'targetFolder',
 
+        // Dropbox: where the iPad Shortcut and the PC drop their files, so the
+        // phone can collect them without going through Android's file picker.
+        DROPBOX_APP_KEY: 'dropboxAppKey',
+        DROPBOX_FOLDER: 'dropboxFolder',
+        DROPBOX_SENT_FOLDER: 'dropboxSentFolder',
+        DROPBOX_AUTO_SYNC: 'dropboxAutoSync',
+        // Kept in storage.local, not sync: it is a credential, and the
+        // authorisation is per device anyway.
+        DROPBOX_REFRESH_TOKEN: 'dropboxRefreshToken',
+        // The PKCE verifier has to outlive the popup: opening the consent page
+        // closes the popup on Firefox Android, so by the time the code is pasted
+        // back nothing in memory has survived.
+        DROPBOX_VERIFIER: 'dropboxVerifier',
+
         // Legacy keys for migration
         LEGACY_USE_CROSSPOINT: 'useCrosspointFirmware',
         LEGACY_CROSSPOINT_IP: 'crosspointIp' // This matches the new key, so migration is implicit for CrossPoint
@@ -33,7 +47,16 @@ const Settings = {
         // replies, so changing network needs no retyping.
         STOCK_IPS: ['192.168.3.3'],
         CROSSPOINT_IPS: ['172.16.24.159', '192.168.1.25'],
-        TARGET_FOLDER: 'send-to-x3'
+        TARGET_FOLDER: 'send-to-x3',
+        /* Deliberately empty. The app key is not a secret — with PKCE there is
+           nothing else to hide — but it identifies one particular Dropbox app,
+           and this repository is public: anyone cloning it has to create their
+           own app and paste its key in Settings, not inherit ours. */
+        DROPBOX_APP_KEY: '',
+        // Named so it sorts first in Dropbox, which is why it exists.
+        DROPBOX_FOLDER: 'AAA',
+        DROPBOX_SENT_FOLDER: 'inviati',
+        DROPBOX_AUTO_SYNC: true
     },
 
     /**
@@ -352,6 +375,122 @@ const Settings = {
                 organizeByDate: false,
                 targetFolder: this.DEFAULTS.TARGET_FOLDER
             };
+        }
+    },
+
+    /**
+     * Dropbox configuration. The refresh token lives in storage.local because it
+     * is a credential; the rest is ordinary preference and syncs.
+     * @returns {Promise<{appKey: string, folder: string, sentFolder: string, refreshToken: string}>}
+     */
+    async getDropbox() {
+        try {
+            const preferences = await browserAPI.storage.sync.get([
+                this.KEYS.DROPBOX_APP_KEY,
+                this.KEYS.DROPBOX_FOLDER,
+                this.KEYS.DROPBOX_SENT_FOLDER,
+                this.KEYS.DROPBOX_AUTO_SYNC
+            ]);
+            const secret = await browserAPI.storage.local.get(this.KEYS.DROPBOX_REFRESH_TOKEN);
+            const auto = preferences[this.KEYS.DROPBOX_AUTO_SYNC];
+
+            return {
+                appKey: preferences[this.KEYS.DROPBOX_APP_KEY] || this.DEFAULTS.DROPBOX_APP_KEY,
+                folder: preferences[this.KEYS.DROPBOX_FOLDER] || this.DEFAULTS.DROPBOX_FOLDER,
+                sentFolder: preferences[this.KEYS.DROPBOX_SENT_FOLDER] || this.DEFAULTS.DROPBOX_SENT_FOLDER,
+                // Default on: the popup is opened in order to send things, so
+                // waiting to be asked is the wrong default. Undefined means
+                // "never chosen", not "off".
+                autoSync: auto === undefined ? this.DEFAULTS.DROPBOX_AUTO_SYNC : Boolean(auto),
+                refreshToken: secret[this.KEYS.DROPBOX_REFRESH_TOKEN] || ''
+            };
+        } catch (error) {
+            console.error('[Settings] Error getting Dropbox settings:', error);
+            return {
+                appKey: this.DEFAULTS.DROPBOX_APP_KEY,
+                folder: this.DEFAULTS.DROPBOX_FOLDER,
+                sentFolder: this.DEFAULTS.DROPBOX_SENT_FOLDER,
+                autoSync: this.DEFAULTS.DROPBOX_AUTO_SYNC,
+                refreshToken: ''
+            };
+        }
+    },
+
+    /**
+     * Turn the on-open Dropbox check on or off.
+     * @param {boolean} enabled
+     * @returns {Promise<void>}
+     */
+    async setDropboxAutoSync(enabled) {
+        await browserAPI.storage.sync.set({ [this.KEYS.DROPBOX_AUTO_SYNC]: Boolean(enabled) });
+    },
+
+    /**
+     * Save the Dropbox folder settings. Only the fields provided are written.
+     * @param {{appKey?: string, folder?: string, sentFolder?: string}} values
+     * @returns {Promise<void>}
+     */
+    async setDropboxConfig(values = {}) {
+        const payload = {};
+        if (typeof values.appKey === 'string') payload[this.KEYS.DROPBOX_APP_KEY] = values.appKey.trim();
+        if (typeof values.folder === 'string') payload[this.KEYS.DROPBOX_FOLDER] = values.folder.trim();
+        if (typeof values.sentFolder === 'string') payload[this.KEYS.DROPBOX_SENT_FOLDER] = values.sentFolder.trim();
+        if (!Object.keys(payload).length) return;
+
+        await browserAPI.storage.sync.set(payload);
+    },
+
+    // A verifier older than this belongs to an abandoned attempt: the code that
+    // matches it has expired at Dropbox anyway.
+    VERIFIER_MAX_AGE_MS: 30 * 60 * 1000,
+
+    /**
+     * The PKCE verifier saved when the consent page was opened, if still fresh.
+     * @returns {Promise<string>} empty when absent or stale
+     */
+    async getDropboxVerifier() {
+        try {
+            const stored = await browserAPI.storage.local.get(this.KEYS.DROPBOX_VERIFIER);
+            const entry = stored[this.KEYS.DROPBOX_VERIFIER];
+            if (!entry || !entry.value) return '';
+            if (Date.now() - (entry.savedAt || 0) > this.VERIFIER_MAX_AGE_MS) {
+                await this.setDropboxVerifier('');
+                return '';
+            }
+            return entry.value;
+        } catch (error) {
+            console.error('[Settings] Error reading Dropbox verifier:', error);
+            return '';
+        }
+    },
+
+    /**
+     * Save, or clear, the PKCE verifier. Cleared as soon as it has been spent.
+     * @param {string} verifier empty string forgets it
+     * @returns {Promise<void>}
+     */
+    async setDropboxVerifier(verifier) {
+        const value = String(verifier || '').trim();
+        if (value) {
+            await browserAPI.storage.local.set({
+                [this.KEYS.DROPBOX_VERIFIER]: { value, savedAt: Date.now() }
+            });
+        } else {
+            await browserAPI.storage.local.remove(this.KEYS.DROPBOX_VERIFIER);
+        }
+    },
+
+    /**
+     * Store, or clear, the Dropbox refresh token.
+     * @param {string} token empty string disconnects the account
+     * @returns {Promise<void>}
+     */
+    async setDropboxRefreshToken(token) {
+        const value = String(token || '').trim();
+        if (value) {
+            await browserAPI.storage.local.set({ [this.KEYS.DROPBOX_REFRESH_TOKEN]: value });
+        } else {
+            await browserAPI.storage.local.remove(this.KEYS.DROPBOX_REFRESH_TOKEN);
         }
     }
 };
