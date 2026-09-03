@@ -42,13 +42,24 @@ export async function queueUsage() {
     return (await listQueue()).reduce((total, item) => total + (item.size || 0), 0);
 }
 
+/**
+ * The queued name for an article title. Shared with the rename in the queue,
+ * so a corrected title produces exactly the name it would have had at import.
+ *
+ * @param {string} title
+ * @returns {string}
+ */
+export function articleFilename(title) {
+    const safe = String(title || 'article').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'article';
+    return `${safe}.epub`;
+}
+
 export async function addArticle(article) {
     const existing = await listQueue();
     if (article.sourceUrl && existing.some(item => item.kind === 'article' && item.sourceUrl === article.sourceUrl)) {
         throw new Error('This article is already in the queue.');
     }
-    const title = String(article.title || 'article').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'article';
-    const filename = `${title}.epub`;
+    const filename = articleFilename(article.title);
     const item = makeItem({ kind: 'article', displayName: article.title || 'Untitled article', filename, mimeType: 'application/epub+zip', sourceUrl: article.sourceUrl, article, size: new Blob([JSON.stringify(article)]).size });
     await ensureCapacity(item.size);
     await transaction('readwrite', store => store.put(item));

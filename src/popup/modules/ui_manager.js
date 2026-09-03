@@ -261,13 +261,68 @@ export class UIManager {
         for (const item of items) {
             const row = document.createElement('li');
             const name = document.createElement('span'); name.className = 'file-name'; name.textContent = item.displayName;
+
+            // Nothing in the document named this article — it is on its way to
+            // the device called "unknown-links.newsletter…" or "Documento 3".
+            // Say so and let the name be typed, rather than sending it nameless.
+            const unnamed = item.kind === 'article' && ['filename', 'hostname'].includes(item.article?.titleSource);
+            if (item.kind === 'article' && handlers.onRenameItem) {
+                row.classList.toggle('needs-name', unnamed);
+                name.classList.add('editable-name');
+                name.title = 'Tap to rename';
+                name.addEventListener('click', () => this.startRenaming(row, name, item, handlers.onRenameItem));
+            }
             const status = item.status === 'failed' ? this.truncateQueueError(item.lastError) : item.status;
-            const meta = document.createElement('small'); meta.className = 'queue-meta'; meta.textContent = `${item.kind === 'article' ? 'Article' : item.filename} · ${status}`;
+            const label = unnamed ? 'No title found — tap the name' : (item.kind === 'article' ? 'Article' : item.filename);
+            const meta = document.createElement('small'); meta.className = 'queue-meta'; meta.textContent = `${label} · ${status}`;
             const details = document.createElement('div'); details.className = 'queue-details'; details.append(name, meta);
             const send = document.createElement('button'); send.className = 'queue-btn'; send.textContent = item.status === 'failed' ? 'Retry' : 'Send'; send.disabled = !!handlers.sending; send.addEventListener('click', () => handlers.onSendItem?.(item));
             const remove = document.createElement('button'); remove.className = 'delete-btn'; remove.textContent = '🗑️'; remove.disabled = !!handlers.sending; remove.addEventListener('click', () => handlers.onRemoveItem?.(item));
             row.append(details, send, remove); this.elements.queueItems.append(row);
         }
+    }
+
+    /**
+     * Turn a queued article's name into a field, in place. Nothing is blocked
+     * while it is open: an item left alone still sends under the name it has.
+     *
+     * @param {HTMLElement} row
+     * @param {HTMLElement} name - the span being replaced
+     * @param {Object} item - the queued item
+     * @param {Function} onRename - (item, title) => Promise<void>
+     */
+    startRenaming(row, name, item, onRename) {
+        if (row.querySelector('.rename-field')) return;
+
+        const field = document.createElement('input');
+        field.type = 'text';
+        field.className = 'rename-field';
+        field.value = item.article?.title || item.displayName || '';
+        field.setAttribute('aria-label', 'Article title');
+
+        // Taking the field out of the DOM makes it lose focus, which fires blur
+        // and would save what Escape has just discarded. Whoever gets here first
+        // decides.
+        let settled = false;
+        const finish = (save) => {
+            if (settled) return;
+            settled = true;
+            const title = field.value.trim();
+            field.replaceWith(name);
+            if (save && title && title !== item.displayName) onRename(item, title);
+        };
+
+        field.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') { event.preventDefault(); finish(true); }
+            if (event.key === 'Escape') { event.preventDefault(); finish(false); }
+        });
+        // Leaving the field is a save: on a phone the keyboard is dismissed far
+        // more often than Enter is pressed.
+        field.addEventListener('blur', () => finish(true));
+
+        name.replaceWith(field);
+        field.focus();
+        field.select();
     }
 
     setQueueProgress(message = '') { this.elements.queueProgress.textContent = message; this.elements.queueProgress.classList.toggle('hidden', !message); }

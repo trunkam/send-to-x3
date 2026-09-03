@@ -1,7 +1,7 @@
 import { UIManager } from './ui_manager.js';
 import { FileManager } from './file_manager.js';
 import { ArticleManager } from './article_manager.js';
-import { addArticle, addFiles, listQueue, removeItem, updateItem, recoverInterruptedItems } from '../../queue/queue_store.js';
+import { addArticle, addFiles, articleFilename, listQueue, removeItem, updateItem, recoverInterruptedItems } from '../../queue/queue_store.js';
 
 // Cross-browser compatibility
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
@@ -96,6 +96,10 @@ class PopupController {
                 this.settings.settingsPanelOpen = allSettings.settingsPanelOpen;
                 this.settings.organizeByDate = allSettings.organizeByDate;
                 this.settings.targetFolder = allSettings.targetFolder;
+
+                // Loaded before any file is parsed: the names learned from past
+                // corrections are what lets a newsletter be recognised at import.
+                window.NewsletterNames.load(await window.Settings.getNewsletterNames());
 
                 this.ui.updateSettingsUI(this.settings);
                 this.ui.setSettingsPanelState(this.settings.settingsPanelOpen);
@@ -290,8 +294,36 @@ class PopupController {
         this.ui.showQueue(this.queueItems, {
             sending: this.sendingQueue,
             onSendItem: item => this.sendQueueItem(item),
-            onRemoveItem: item => this.handleRemoveQueueItem(item)
+            onRemoveItem: item => this.handleRemoveQueueItem(item),
+            onRenameItem: (item, title) => this.handleRenameQueueItem(item, title)
         });
+    }
+
+    /**
+     * Rename a queued article, and — when the file carries a campaign marker —
+     * remember the name against it, so the next issue of that newsletter
+     * arrives already named.
+     *
+     * @param {Object} item
+     * @param {string} title
+     */
+    async handleRenameQueueItem(item, title) {
+        try {
+            const article = { ...item.article, title, titleSource: 'manual' };
+            await updateItem({ ...item, article, displayName: title, filename: articleFilename(title) });
+
+            const marker = item.article?.campaign;
+            if (marker) {
+                await window.Settings.setNewsletterNames(window.NewsletterNames.remember(marker, title));
+            }
+
+            await this.refreshQueue();
+            this.ui.setQueueProgress(marker
+                ? `Renamed to "${title}" — the next issues of this newsletter will use it.`
+                : `Renamed to "${title}".`);
+        } catch (error) {
+            this.ui.setQueueProgress(error.message);
+        }
     }
 
     async handleQueueArticle() {

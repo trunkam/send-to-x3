@@ -15,6 +15,9 @@ const Settings = {
         SETTINGS_PANEL_OPEN: 'settingsPanelOpen',
         ORGANIZE_BY_DATE: 'organizeByDate',
         TARGET_FOLDER: 'targetFolder',
+        // Campaign marker -> the name a reader knows the newsletter by, learned
+        // from the first issue that had to be renamed in the queue.
+        NEWSLETTER_NAMES: 'newsletterNames',
 
         // Dropbox: where the iPad Shortcut and the PC drop their files, so the
         // phone can collect them without going through Android's file picker.
@@ -311,6 +314,34 @@ const Settings = {
 
     async setOrganizeByDate(enabled) {
         await browserAPI.storage.sync.set({ [this.KEYS.ORGANIZE_BY_DATE]: !!enabled });
+    },
+
+    /**
+     * Newsletter names, as corrected once in the queue and reused from then on.
+     * @returns {Promise<Object>} campaign marker -> readable name
+     */
+    async getNewsletterNames() {
+        try {
+            const result = await browserAPI.storage.sync.get(this.KEYS.NEWSLETTER_NAMES);
+            const stored = result[this.KEYS.NEWSLETTER_NAMES];
+            return stored && typeof stored === 'object' ? stored : {};
+        } catch (error) {
+            console.error('[Settings] Error getting newsletter names:', error);
+            return {};
+        }
+    },
+
+    /**
+     * @param {Object} names - campaign marker -> readable name
+     * @returns {Promise<void>}
+     */
+    async setNewsletterNames(names) {
+        try {
+            await browserAPI.storage.sync.set({ [this.KEYS.NEWSLETTER_NAMES]: names || {} });
+        } catch (error) {
+            console.error('[Settings] Error saving newsletter names:', error);
+            throw error;
+        }
     },
 
     /**
