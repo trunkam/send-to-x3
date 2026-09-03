@@ -148,7 +148,28 @@ export function extractArticle() {
         const hasReadability = typeof Readability !== 'undefined';
         console.log('[X4] Readability available:', hasReadability);
 
-        let title = document.title;
+        // A newsletter opened in the browser is an HTML email: it can have an
+        // empty <title> and no og:title, with the title written only in the page's
+        // own <h1>. Readability already falls back to that heading, but the
+        // fallback path below has to do it for itself or it names the file after
+        // an empty string.
+        //
+        // The last resort is the hostname, which names nothing: it is reported as
+        // such in titleSource, so the queue can offer to rename the article
+        // instead of sending it called "links.newsletter.rcsmediagroup.it".
+        const pageTitle = () => {
+            const fromMeta = document.querySelector('meta[property="og:title"]')?.content ||
+                document.querySelector('meta[name="twitter:title"]')?.content || '';
+            const fromHeading = document.querySelector('h1')?.textContent || '';
+            const found = document.title.trim() || fromMeta.trim() || fromHeading.trim();
+            return found || new URL(window.location.href).hostname.replace('www.', '');
+        };
+        const titleWasFound = () => Boolean(document.title.trim() ||
+            document.querySelector('meta[property="og:title"]')?.content?.trim() ||
+            document.querySelector('meta[name="twitter:title"]')?.content?.trim() ||
+            document.querySelector('h1')?.textContent?.trim());
+
+        let title = pageTitle();
         let author = '';
         let date = new Date().toISOString().split('T')[0];
         let body = '';
@@ -187,7 +208,7 @@ export function extractArticle() {
             readabilityLength = article?.textContent?.length ?? 0;
 
             if (article && article.textContent && article.textContent.length >= 400) {
-                title = article.title || document.title;
+                title = article.title || pageTitle();
                 author = article.byline || article.siteName || '';
                 body = article.content;
                 textContent = article.textContent;
@@ -214,6 +235,7 @@ export function extractArticle() {
                     success: true,
                     article: {
                         title,
+                        titleSource: article.title ? 'readability' : (titleWasFound() ? 'page' : 'hostname'),
                         author,
                         date,
                         wordCount,
@@ -289,6 +311,7 @@ export function extractArticle() {
             success: true,
             article: {
                 title,
+                titleSource: titleWasFound() ? 'page' : 'hostname',
                 author,
                 date,
                 wordCount,
