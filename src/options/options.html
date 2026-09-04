@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Send to X3 — Settings</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      padding: 32px 24px;
+      background: #18181b;
+      color: #e4e4e7;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    main { max-width: 620px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    h2 { font-size: 15px; margin: 28px 0 8px; }
+    p { margin: 8px 0; }
+    .hint { color: #a1a1aa; font-size: 12px; }
+    .card {
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 12px;
+    }
+    .folder-name {
+      font-family: ui-monospace, Consolas, monospace;
+      background: #18181b;
+      border: 1px solid #3f3f46;
+      border-radius: 4px;
+      padding: 6px 8px;
+      display: inline-block;
+      word-break: break-all;
+    }
+    .buttons { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    button {
+      background: #3f3f46;
+      color: #e4e4e7;
+      border: 1px solid #52525b;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+    button:hover { filter: brightness(1.15); }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .message { margin-top: 12px; font-size: 13px; }
+    .message.error { color: #f87171; }
+    .hidden { display: none; }
+  </style>
+</head>
+
+<body>
+  <main>
+    <h1>Send to X3</h1>
+    <p class="hint">Settings kept on this computer only.</p>
+
+    <h2>Save folder</h2>
+    <p>
+      With a folder chosen here, <strong>Download</strong> in the popup writes the EPUB
+      straight into it instead of the browser's download folder. Point it at the Dropbox
+      folder the reader picks up from, and the article travels on its own.
+    </p>
+
+    <div class="card">
+      <div id="unsupported" class="hidden">
+        <p>This browser cannot hand an extension a folder of its own choosing, so
+          <strong>Download</strong> saves to the browser's download folder as usual.
+          The feature needs Chrome or another Chromium browser.</p>
+      </div>
+
+      <div id="supported" class="hidden">
+        <p id="current">No folder chosen yet.</p>
+        <div class="buttons">
+          <button id="choose" class="primary" type="button">Choose folder…</button>
+          <button id="confirm" class="hidden" type="button">Confirm access</button>
+          <button id="forget" class="hidden" type="button">Use the download folder again</button>
+        </div>
+        <p id="message" class="message hint"></p>
+      </div>
+    </div>
+  </main>
+
+  <script src="../utils/save_folder.js"></script>
+  <script src="options.js"></script>
+</body>
+
+</html>

@@ -48,6 +48,16 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
+    if (message.type === 'X4_BUILD_EPUB') {
+        handleBuildEpub(message.payload)
+            .then(result => sendResponse(result))
+            .catch(error => sendResponse({
+                success: false,
+                error: error.message
+            }));
+        return true;
+    }
+
     if (message.type === 'X4_UPLOAD_QUEUE_ITEM') {
         handleUploadQueueItem(message, sendResponse);
         return true;
@@ -359,19 +369,48 @@ function readQueuedItem(id) {
 }
 
 /**
+ * EPUB bytes as base64. Both the download fallback, which needs a data URL,
+ * and the popup, which needs the bytes themselves, come through here: a Blob
+ * does not survive a runtime message in Chrome.
+ */
+function bytesToBase64(arrayBuffer) {
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
+
+/**
+ * Build the EPUB and hand it back rather than download it. The popup owns the
+ * folder handle, an API that does not exist in a service worker, but only this
+ * side has JSZip and the builder, so the bytes travel back as base64.
+ */
+async function handleBuildEpub(article) {
+    const epubBlob = await EpubBuilder.build(article);
+
+    if (!epubBlob || !(epubBlob instanceof Blob)) {
+        throw new Error('EPUB generation failed');
+    }
+
+    const arrayBuffer = await EpubBuilder.blobToArrayBuffer(epubBlob);
+
+    return {
+        success: true,
+        filename: EpubBuilder.generateFilename(article),
+        base64: bytesToBase64(arrayBuffer)
+    };
+}
+
+/**
  * Download EPUB as a base64 data URL. Service workers cannot create object
  * URLs, so this path works consistently in Chrome and Firefox.
  */
 async function downloadEpubFallback(arrayBuffer, filename) {
     try {
         console.log('[X4 SW] Triggering download fallback...');
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i]);
-        }
-        const base64 = btoa(binary);
-        const downloadUrl = `data:application/epub+zip;base64,${base64}`;
+        const downloadUrl = `data:application/epub+zip;base64,${bytesToBase64(arrayBuffer)}`;
         console.log('[X4 SW] Data URL length:', downloadUrl.length);
 
         // Trigger download

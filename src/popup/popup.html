@@ -160,6 +160,12 @@
           <p class="hint">EPUBs are saved to this folder on your X3. Renaming does not move existing files.</p>
         </div>
 
+        <div class="settings-sub-option hidden" id="save-folder-row">
+          <label class="input-label">Save folder on this computer</label>
+          <p id="save-folder-status" class="hint">Download saves to the browser folder.</p>
+          <button id="save-folder-btn" class="send-btn secondary" type="button"><span class="btn-icon">📁</span><span class="btn-text">Choose folder</span></button>
+        </div>
+
         <div class="settings-sub-option">
           <label class="input-label" for="dropbox-app-key">Dropbox app key</label>
           <input type="text" id="dropbox-app-key" class="settings-input" placeholder="from dropbox.com/developers/apps">
@@ -196,6 +202,7 @@
   <script src="../utils/newsletter_names.js"></script>
   <script src="../utils/html_article.js"></script>
   <script src="../utils/dropbox_client.js"></script>
+  <script src="../utils/save_folder.js"></script>
   <script type="module" src="modules/main.js"></script>
 </body>
 

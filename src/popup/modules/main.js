@@ -21,6 +21,8 @@ class PopupController {
         this.stopQueueRequested = false;
         this.deviceConnected = false;
         this.dropboxSyncing = false;
+        // Chosen on this computer only, where the browser can hand us a folder.
+        this.saveFolder = null;
     }
 
     async init() {
@@ -31,6 +33,7 @@ class PopupController {
         this.ui.setupListeners({
             onSend: () => this.handleSend(),
             onDownload: () => this.handleDownload(),
+            onSaveFolder: () => this.handleSaveFolder(),
             onQueueArticle: () => this.handleQueueArticle(),
             onImportFiles: (event) => this.handleImportFiles(event),
             onDropboxSync: () => this.handleDropboxSync(),
@@ -77,7 +80,8 @@ class PopupController {
             this.checkArticle(),
             this.checkDevice(),
             this.refreshQueue(),
-            this.loadDropboxState()
+            this.loadDropboxState(),
+            this.loadSaveFolder()
         ]);
         // After the state is on screen: may finish an authorisation started
         // before the popup was closed by the consent tab.
@@ -700,6 +704,45 @@ class PopupController {
         }
     }
 
+    // --- Save folder ---------------------------------------------------------
+
+    /* Chrome can write into a folder of the user’s choosing, which the plain
+       download cannot: `downloads` never leaves the browser’s own folder. On the
+       PC that folder is the Dropbox one the phone reads from, so an article saved
+       here reaches the X3 without an app key. */
+    async loadSaveFolder() {
+        if (!globalThis.SaveFolder || !SaveFolder.isSupported()) {
+            this.ui.showSaveFolder({ supported: false });
+            return;
+        }
+
+        this.saveFolder = await SaveFolder.recall();
+        this.ui.showSaveFolder({ supported: true, name: this.saveFolder ? this.saveFolder.name : null });
+    }
+
+    /* Picking the folder opens a system dialog, and that closes the popup along
+       with the handle it just received. The settings page survives it. */
+    async handleSaveFolder() {
+        await browserAPI.runtime.openOptionsPage();
+        window.close();
+    }
+
+    /* Confirming access needs a user gesture, and the click that started this is
+       it, so the ask happens now rather than while the popup was loading. */
+    async saveIntoFolder(article) {
+        const state = await SaveFolder.permission(this.saveFolder, { request: true });
+        if (state !== 'granted') {
+            throw new Error(`Access to "${this.saveFolder.name}" was refused. Choose the folder again in Settings.`);
+        }
+
+        const response = await browserAPI.runtime.sendMessage({ type: 'X4_BUILD_EPUB', payload: article });
+        if (!response || !response.success) {
+            throw new Error((response && response.error) || 'EPUB generation failed');
+        }
+
+        return SaveFolder.write(this.saveFolder, response.filename, SaveFolder.blobFromBase64(response.base64));
+    }
+
     async handleDownload() {
         const article = this.articleManager.articleData;
         if (!article) return;
@@ -707,6 +750,12 @@ class PopupController {
         this.ui.setDownloadButtonState('downloading');
 
         try {
+            if (this.saveFolder) {
+                await this.saveIntoFolder(article);
+                this.ui.setDownloadButtonState('success');
+                return;
+            }
+
             const response = await browserAPI.runtime.sendMessage({
                 type: 'X4_DOWNLOAD_ARTICLE',
                 payload: {

@@ -50,6 +50,9 @@ export class UIManager {
             settingsContent: document.getElementById('settings-content'),
             settingsToggleIcon: document.getElementById('settings-toggle-icon'),
             sortSelect: document.getElementById('sort-order'),
+            saveFolderRow: document.getElementById('save-folder-row'),
+            saveFolderStatus: document.getElementById('save-folder-status'),
+            saveFolderBtn: document.getElementById('save-folder-btn'),
             dropboxSyncBtn: document.getElementById('dropbox-sync-btn'),
             dropboxAutoSync: document.getElementById('dropbox-auto-sync'),
             dropboxAppKeyInput: document.getElementById('dropbox-app-key'),
@@ -62,6 +65,33 @@ export class UIManager {
             dropboxCodeInput: document.getElementById('dropbox-code'),
             dropboxCodeSaveBtn: document.getElementById('dropbox-code-save-btn')
         };
+    }
+
+    /**
+     * Reflect the folder this computer saves into.
+     * @param {{supported: boolean, name?: string}} state
+     */
+    showSaveFolder(state = {}) {
+        const { saveFolderRow, saveFolderStatus } = this.elements;
+        if (!saveFolderRow) return;
+
+        saveFolderRow.classList.toggle('hidden', !state.supported);
+        if (!state.supported) return;
+
+        saveFolderStatus.textContent = state.name
+            ? `Download writes into "${state.name}".`
+            : 'Download saves to the browser folder. Choose a folder to write there instead.';
+
+        this.setDownloadLabel(state.name ? `Save to ${state.name}` : null);
+    }
+
+    /**
+     * The button says where the article is going, so a click is never a guess.
+     * @param {string|null} label
+     */
+    setDownloadLabel(label) {
+        this.downloadLabel = label || 'Download';
+        if (!this.elements.downloadBtn.disabled) this.setDownloadButtonState('idle');
     }
 
     /**
@@ -103,6 +133,7 @@ export class UIManager {
         if (handlers.onDownload) this.elements.downloadBtn.addEventListener('click', handlers.onDownload);
         if (handlers.onQueueArticle) this.elements.queueArticleBtn.addEventListener('click', handlers.onQueueArticle);
         if (handlers.onImportFiles) this.elements.importFiles.addEventListener('change', handlers.onImportFiles);
+        if (handlers.onSaveFolder) this.elements.saveFolderBtn.addEventListener('click', handlers.onSaveFolder);
         if (handlers.onDropboxSync) this.elements.dropboxSyncBtn.addEventListener('click', handlers.onDropboxSync);
         if (handlers.onDropboxAutoSyncChange) this.elements.dropboxAutoSync.addEventListener('change', handlers.onDropboxAutoSyncChange);
         if (handlers.onDropboxConnect) this.elements.dropboxConnectBtn.addEventListener('click', handlers.onDropboxConnect);
@@ -549,7 +580,7 @@ export class UIManager {
             default:
                 btn.disabled = false;
                 iconSpan.textContent = '📥';
-                textSpan.textContent = 'Download';
+                textSpan.textContent = this.downloadLabel || 'Download';
                 break;
         }
     }
