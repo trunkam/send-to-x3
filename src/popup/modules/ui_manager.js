@@ -21,6 +21,7 @@ export class UIManager {
             articleAuthor: document.getElementById('article-author'),
             articleWords: document.getElementById('article-words'),
             errorMessage: document.getElementById('error-message'),
+            articleStatus: document.getElementById('article-status'),
             sendBtn: document.getElementById('send-btn'),
             downloadBtn: document.getElementById('download-btn'),
             queueArticleBtn: document.getElementById('queue-article-btn'),
@@ -193,6 +194,7 @@ export class UIManager {
         this.elements.articleTitle.textContent = article.title;
         this.elements.articleAuthor.textContent = article.author;
         this.elements.articleWords.textContent = `${article.wordCount?.toLocaleString() || '—'} words`;
+        this.setArticleStatus('');
     }
 
     showArticleNotFound(detail = null) {
@@ -522,6 +524,7 @@ export class UIManager {
                 btn.disabled = true;
                 iconSpan.innerHTML = '<div class="btn-spinner"></div>';
                 textSpan.textContent = 'Sending...';
+                this.setArticleStatus('');
                 break;
 
             case 'success':
@@ -529,7 +532,8 @@ export class UIManager {
                 btn.disabled = !this.deviceConnected;
                 btn.classList.add('success');
                 iconSpan.textContent = '✅';
-                textSpan.textContent = message || 'Sent!';
+                textSpan.textContent = 'Sent!';
+                this.setArticleStatus(message);
                 setTimeout(() => this.setSendButtonState('idle'), 3000);
                 break;
 
@@ -538,7 +542,9 @@ export class UIManager {
                 btn.disabled = !this.deviceConnected;
                 btn.classList.add('error');
                 iconSpan.textContent = '❌';
-                textSpan.textContent = message || 'Failed';
+                textSpan.textContent = 'Failed';
+                // A reason no button is wide enough for belongs under the buttons.
+                this.setArticleStatus(message);
                 setTimeout(() => this.setSendButtonState('idle'), 4000);
                 break;
 
@@ -551,6 +557,22 @@ export class UIManager {
         }
     }
 
+    /**
+     * Say what became of the article, under the buttons.
+     *
+     * The button has room for one word, and on the phone there is no console to
+     * consult afterwards: a bare "Failed" is indistinguishable from every other
+     * way this can go wrong, and "Saved!" does not say where the file went.
+     *
+     * @param {string} message - empty hides the line
+     */
+    setArticleStatus(message = '') {
+        const status = this.elements.articleStatus;
+        if (!status) return;
+        status.textContent = message;
+        status.classList.toggle('hidden', !message);
+    }
+
     setDownloadButtonState(state, message = '') {
         const btn = this.elements.downloadBtn;
         const iconSpan = btn.querySelector('.btn-icon');
@@ -561,12 +583,14 @@ export class UIManager {
                 btn.disabled = true;
                 iconSpan.innerHTML = '<div class="btn-spinner"></div>';
                 textSpan.textContent = '...';
+                this.setArticleStatus('');
                 break;
 
             case 'success':
                 btn.disabled = false;
                 iconSpan.textContent = '✅';
                 textSpan.textContent = 'Saved!';
+                this.setArticleStatus(message);
                 setTimeout(() => this.setDownloadButtonState('idle'), 2000);
                 break;
 
@@ -574,6 +598,7 @@ export class UIManager {
                 btn.disabled = false;
                 iconSpan.textContent = '❌';
                 textSpan.textContent = 'Failed';
+                this.setArticleStatus(message);
                 setTimeout(() => this.setDownloadButtonState('idle'), 3000);
                 break;
 

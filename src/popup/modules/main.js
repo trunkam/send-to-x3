@@ -743,6 +743,24 @@ class PopupController {
         return SaveFolder.write(this.saveFolder, response.filename, SaveFolder.blobFromBase64(response.base64));
     }
 
+    /* Build the EPUB in the worker, which owns JSZip, and let the page hand it
+       to the browser. This is the way that needs nothing but a document, so it
+       is the one that works on Firefox for Android, where there is no downloads
+       API to call. */
+    async downloadThroughLink(article) {
+        const response = await browserAPI.runtime.sendMessage({ type: 'X4_BUILD_EPUB', payload: article });
+        if (!response || !response.success) {
+            throw new Error((response && response.error) || 'EPUB generation failed');
+        }
+
+        BlobDownload.save(SaveFolder.blobFromBase64(response.base64), response.filename);
+        return response.filename;
+    }
+
+    /* Three ways home, tried in the order of how well they land.
+       The chosen folder is the PC's: the file arrives where Dropbox will carry
+       it. The downloads API is Chrome's, and Firefox desktop's when it accepts
+       the file. The link is what remains, and what the phone has. */
     async handleDownload() {
         const article = this.articleManager.articleData;
         if (!article) return;
@@ -751,24 +769,31 @@ class PopupController {
 
         try {
             if (this.saveFolder) {
-                await this.saveIntoFolder(article);
-                this.ui.setDownloadButtonState('success');
+                const name = await this.saveIntoFolder(article);
+                this.ui.setDownloadButtonState('success', `Written into "${this.saveFolder.name}" as ${name}.`);
                 return;
             }
 
-            const response = await browserAPI.runtime.sendMessage({
-                type: 'X4_DOWNLOAD_ARTICLE',
-                payload: {
-                    kind: 'generic_article',
-                    ...article
-                }
-            });
+            if (typeof browserAPI.downloads?.download === 'function') {
+                const response = await browserAPI.runtime.sendMessage({
+                    type: 'X4_DOWNLOAD_ARTICLE',
+                    payload: {
+                        kind: 'generic_article',
+                        ...article
+                    }
+                });
 
-            if (response && response.success) {
-                this.ui.setDownloadButtonState('success');
-            } else {
-                this.ui.setDownloadButtonState('error', response?.error || 'Unknown error');
+                if (response && response.success) {
+                    this.ui.setDownloadButtonState('success', 'Saved to the browser’s download folder.');
+                    return;
+                }
+
+                // Firefox refuses some of what it is handed here; the link does not.
+                console.warn('[Popup Controller] The downloads API refused the file:', response?.error);
             }
+
+            const filename = await this.downloadThroughLink(article);
+            this.ui.setDownloadButtonState('success', `Saved as "${filename}" in your downloads.`);
         } catch (error) {
             console.error('[Popup Controller] Download error:', error);
             this.ui.setDownloadButtonState('error', error.message);

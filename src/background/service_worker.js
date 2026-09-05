@@ -301,7 +301,12 @@ async function handleSendArticle(messageData, sender, sendResponse) {
         await logToPopup(`Upload failed (${uploadResult.error}), falling back to download.`);
         if (tabId) await sendStatusUpdate(sender, 'downloading', 'Downloading (X3 upload failed)...');
 
-        await downloadEpubFallback(arrayBuffer, filename);
+        try {
+            await downloadEpubFallback(arrayBuffer, filename);
+        } catch (downloadError) {
+            // Both reasons matter: the X3 did not take it, and neither did the disk.
+            throw new Error(`Upload failed (${uploadResult.error}), and the file could not be downloaded either: ${downloadError.message}`);
+        }
 
         sendResponse({
             success: true,
@@ -404,17 +409,27 @@ async function handleBuildEpub(article) {
 }
 
 /**
- * Download EPUB as a base64 data URL. Service workers cannot create object
- * URLs, so this path works consistently in Chrome and Firefox.
+ * Download the EPUB from the worker.
+ *
+ * Two things differ between the browsers here. Chrome's service worker cannot
+ * create object URLs, so there it has to be a data: URL; Firefox refuses data:
+ * URLs in downloads.download at schema validation, but its background page can
+ * make an object URL, so there it is a blob:. And Firefox for Android has no
+ * downloads API at all, which is worth saying in words rather than throwing a
+ * TypeError about an undefined property.
  */
 async function downloadEpubFallback(arrayBuffer, filename) {
-    try {
-        console.log('[X4 SW] Triggering download fallback...');
-        const downloadUrl = `data:application/epub+zip;base64,${bytesToBase64(arrayBuffer)}`;
-        console.log('[X4 SW] Data URL length:', downloadUrl.length);
+    if (typeof browserAPI.downloads?.download !== 'function') {
+        throw new Error('This browser cannot download files from an extension. Queue the article and send it to the X3 instead.');
+    }
 
-        // Trigger download
-        console.log('[X4 SW] Calling browserAPI.downloads.download...');
+    const canMakeObjectUrl = typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function';
+    const downloadUrl = canMakeObjectUrl
+        ? URL.createObjectURL(new Blob([arrayBuffer], { type: 'application/epub+zip' }))
+        : `data:application/epub+zip;base64,${bytesToBase64(arrayBuffer)}`;
+
+    try {
+        console.log('[X4 SW] Triggering download fallback with', canMakeObjectUrl ? 'a blob URL' : 'a data URL');
         const downloadId = await browserAPI.downloads.download({
             url: downloadUrl,
             filename: filename,
@@ -425,6 +440,12 @@ async function downloadEpubFallback(arrayBuffer, filename) {
     } catch (error) {
         console.error('[X4 SW] Download failed:', error);
         throw error;
+    } finally {
+        /* Revoking before the download has been picked up cancels it, so the
+           URL outlives the call that used it. */
+        if (canMakeObjectUrl) {
+            setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
+        }
     }
 }
 
