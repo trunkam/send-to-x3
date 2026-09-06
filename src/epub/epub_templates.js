@@ -106,7 +106,7 @@ ${coverItem}
       ? `<p class="meta">${metaParts.join(' • ')}</p>`
       : '';
 
-    // Convert HTML body to XHTML (properly close self-closing tags)
+    // Convert HTML body to XHTML (close void tags, make the entities XML's)
     const xhtmlBody = this.htmlToXhtml(body);
 
     return `<?xml version="1.0" encoding="UTF-8"?>
@@ -196,6 +196,61 @@ ${coverItem}
 
     // Replace with self-closing version
     // Also ensures we don't double-close if the regex is too greedy, but (?<!/) handles the check.
-    return html.replace(pattern, '<$1$2 />');
+    return this.xmlSafeEntities(html.replace(pattern, '<$1$2 />'));
+  },
+
+  /**
+   * The handful of HTML named entities that turn up in article prose, with the
+   * character each one stands for. XML declares five names and no more, so
+   * every other name has to travel as a number instead.
+   */
+  NAMED_ENTITIES: {
+    nbsp: 160, iexcl: 161, cent: 162, pound: 163, curren: 164, yen: 165,
+    sect: 167, uml: 168, copy: 169, laquo: 171, not: 172, shy: 173, reg: 174,
+    deg: 176, plusmn: 177, sup2: 178, sup3: 179, micro: 181, para: 182,
+    middot: 183, raquo: 187, frac14: 188, frac12: 189, frac34: 190,
+    times: 215, divide: 247, ndash: 8211, mdash: 8212, lsquo: 8216,
+    rsquo: 8217, sbquo: 8218, ldquo: 8220, rdquo: 8221, bdquo: 8222,
+    dagger: 8224, Dagger: 8225, bull: 8226, hellip: 8230, permil: 8240,
+    prime: 8242, Prime: 8243, euro: 8364, trade: 8482
+  },
+
+  /**
+   * XML knows five entity names and no more, and a bare ampersand is not a
+   * character in it but a syntax error. Article prose carries both: a WSJ page
+   * ends on "Dow Jones & Company", and a body serialised out of the DOM writes
+   * a non-breaking space as &nbsp;. Either one leaves content.xhtml ill-formed,
+   * and a reader that parses it strictly - the X3 does - loses the document
+   * from that point on, so turning the page there lands back on the first page
+   * instead of the next.
+   *
+   * References that are already valid come out untouched, so running this over
+   * text an earlier step escaped changes nothing.
+   *
+   * @param {string} text
+   */
+  xmlSafeEntities(text) {
+    const XML_NAMES = ['amp', 'lt', 'gt', 'quot', 'apos'];
+
+    return String(text).replace(
+      /&(?:([a-zA-Z][a-zA-Z0-9]*)|#[0-9]+|#[xX][0-9a-fA-F]+);|&/g,
+      (match, name) => {
+        // No name captured means the match was a numeric reference, or the
+        // lone ampersand of the last branch.
+        if (name === undefined) return match === '&' ? '&amp;' : match;
+        if (XML_NAMES.includes(name)) return match;
+
+        const code = this.NAMED_ENTITIES[name];
+        // A name nobody here knows keeps its letters and loses its meaning:
+        // wrong on the page, but the page still opens.
+        return code ? `&#${code};` : `&amp;${name};`;
+      }
+    );
   }
 };
+
+// Expose for classic scripts, ES modules (globalThis), and Node tests (CommonJS)
+globalThis.EpubTemplates = EpubTemplates;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = EpubTemplates;
+}

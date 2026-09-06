@@ -303,9 +303,18 @@ export function extractArticle() {
             if (normalizedDate) date = normalizedDate;
         }
 
-        // Create simple HTML body
+        // Create simple HTML body. This is plain page text on its way into a
+        // file that gets parsed as XML, so all three of XML's dangerous
+        // characters have to go - the ampersand included. A WSJ article ends on
+        // "Dow Jones & Company": left bare, that one character makes the EPUB
+        // ill-formed from there to the end, and the X3 stops turning pages.
+        // The ampersand goes first, or it would escape its own escapes.
         const paragraphs = textContent.split(/\n\n+/).filter(p => p.trim().length > 0);
-        body = paragraphs.map(p => `<p>${p.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`).join('\n');
+        const asXmlText = (text) => text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        body = paragraphs.map(p => `<p>${asXmlText(p.trim())}</p>`).join('\n');
 
         return {
             success: true,
