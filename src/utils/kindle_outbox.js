@@ -47,6 +47,20 @@ const KindleOutbox = {
             !sent.some(done => done.filename === entry.filename && done.addedAt === entry.addedAt));
     },
 
+    /* Queue items that still owe the Kindle a copy: queued before the copy was
+       turned on, or before the extension could make copies at all. Each one
+       remembers, so it is copied once and not again at every popup. */
+    owedByQueue(items) {
+        return (items || []).filter(item => !item.kindleCopied);
+    },
+
+    // What prepareKindleCopy needs from a queue item.
+    sourceFor(item) {
+        return item.kind === 'article'
+            ? { article: item.article }
+            : { filename: item.filename, blob: item.blob };
+    },
+
     // Firefox reports a missing network as a bare TypeError from fetch, which
     // says nothing to someone reading it on a phone in a tunnel.
     describeError(message) {

@@ -83,3 +83,19 @@ describe('KindleOutbox.toBase64', () => {
         assert.ok(back.equals(Buffer.from(bytes)));
     });
 });
+
+describe('KindleOutbox and the queue', () => {
+    it('finds the items queued before the copy existed, and only those', () => {
+        const items = [
+            { id: 1, kind: 'article', article: { title: 'old' } },
+            { id: 2, kind: 'article', article: { title: 'new' }, kindleCopied: true }
+        ];
+        assert.deepEqual(KindleOutbox.owedByQueue(items).map(item => item.id), [1]);
+    });
+
+    it('hands over the article of an article and the file of a file', () => {
+        const blob = { size: 3 };
+        assert.deepEqual(KindleOutbox.sourceFor({ kind: 'article', article: { title: 'A' } }), { article: { title: 'A' } });
+        assert.deepEqual(KindleOutbox.sourceFor({ kind: 'file', filename: 'b.epub', blob }), { filename: 'b.epub', blob });
+    });
+});

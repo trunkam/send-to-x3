@@ -89,8 +89,9 @@ class PopupController {
         await this.completeDropboxIfPossible();
         // Not awaited: the popup stays responsive while Dropbox is contacted.
         this.autoSyncDropboxIfEnabled();
-        // Copies for the Kindle left behind by a send without internet.
-        this.flushKindleCopies();
+        // Queued articles that never got their Kindle copy, and copies left
+        // behind by a send without internet.
+        this.catchUpKindleCopies();
     }
 
     async loadSettings() {
@@ -336,11 +337,11 @@ class PopupController {
     async handleQueueArticle() {
         if (!this.articleManager.articleData) return;
         try {
-            await addArticle(this.articleManager.articleData);
+            const item = await addArticle(this.articleManager.articleData);
             await this.refreshQueue();
             this.ui.setQueueProgress('Article added to the local queue.');
             // The X3 may be days away; the Kindle does not have to wait for it.
-            if (await this.prepareKindleCopy({ article: this.articleManager.articleData })) this.flushKindleCopies();
+            if (await this.copyQueueItemForKindle(item)) this.flushKindleCopies();
         } catch (error) {
             this.ui.setQueueProgress(error.message);
         }
@@ -363,11 +364,10 @@ class PopupController {
                 filename: file.name,
                 date: TransferUtils.dateFolder(new Date(file.lastModified || Date.now()))
             });
-            await addArticle(article);
-            await this.prepareKindleCopy({ article });
+            await this.copyQueueItemForKindle(await addArticle(article));
         } else {
-            await addFiles([file]);
-            await this.prepareKindleCopy({ filename: file.name, blob: file });
+            const [item] = await addFiles([file]);
+            await this.copyQueueItemForKindle(item);
         }
     }
 
@@ -567,6 +567,30 @@ class PopupController {
         }
     }
 
+    /* Prepares the copy of one queue item and marks the item, so it is not
+       copied again - neither at the next popup nor when it goes to the X3. */
+    async copyQueueItemForKindle(item) {
+        if (!item || item.kindleCopied) return false;
+        if (!await this.prepareKindleCopy(KindleOutbox.sourceFor(item))) return false;
+        await updateItem({ ...item, kindleCopied: true });
+        return true;
+    }
+
+    /* On popup open: gives a copy to every queued item that never had one -
+       queued before the copy was turned on, or by a version that could not make
+       it - then uploads whatever is waiting. */
+    async catchUpKindleCopies() {
+        if (!window.Settings || !globalThis.KindleOutbox) return;
+        try {
+            for (const item of KindleOutbox.owedByQueue(await listQueue())) {
+                await this.copyQueueItemForKindle(item);
+            }
+        } catch (error) {
+            this.ui.setKindleStatus(`Kindle copies for the queue could not be prepared: ${error.message}`);
+        }
+        await this.flushKindleCopies();
+    }
+
     /* Uploads whatever is waiting. Always says how it went, including when it
        could not: a copy that silently stayed behind looks exactly like one that
        arrived. Says nothing only when nothing was waiting. */
@@ -694,12 +718,16 @@ class PopupController {
         } finally {
             this.sendingQueue = false;
             await this.refreshQueue();
+            this.flushKindleCopies();
         }
     }
 
     async sendQueueItem(item, batch = false) {
         if (this.sendingQueue && !batch) return;
         if (!batch) this.sendingQueue = true;
+        // Read it again: the list on screen may predate the Kindle copy made at
+        // popup open, and writing that old copy back would lose its mark.
+        item = (await listQueue()).find(candidate => candidate.id === item.id) || item;
         const position = this.queueItems.findIndex(candidate => candidate.id === item.id) + 1;
         const current = { ...item, status: 'sending', lastError: null, attempts: (item.attempts || 0) + 1, lastAttemptAt: new Date().toISOString() };
         await updateItem(current);
@@ -709,9 +737,12 @@ class PopupController {
             const targetDirectory = TransferUtils.destination(this.settings.targetFolder, this.settings.organizeByDate, item.contentDate || item.createdAt);
             const response = await browserAPI.runtime.sendMessage({ type: 'X4_UPLOAD_QUEUE_ITEM', payload: { itemId: current.id, targetDirectory }, settings: { firmwareType: this.settings.firmwareType, deviceIp: this.settings.deviceIp } });
             if (!response?.success) throw new Error(response?.error || 'Upload failed.');
-            // No Kindle copy here: it was made when the item entered the queue.
-            // A second one would carry today's date in its name, not the first
-            // one's, and sit next to it on the Kindle.
+            // The Kindle copy is normally made when the item enters the queue;
+            // the mark keeps it from being made twice, which would carry
+            // today's date in its name and sit next to the first on the Kindle.
+            // Only an item that somehow missed it gets one here, before it
+            // leaves the queue and takes the article with it.
+            if (await this.copyQueueItemForKindle(item) && !batch) this.flushKindleCopies();
             await removeItem(item.id);
             this.ui.setQueueProgress(`Sent: ${item.displayName}`);
             await this.refreshQueue();
