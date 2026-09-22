@@ -757,6 +757,26 @@ class PopupController {
         return response.filename;
     }
 
+    /* Whether it is worth asking the downloads API at all.
+
+       Testing for the function is not enough: on Firefox for Android
+       `downloads.download` reads as a function while nothing stands behind it,
+       so the request goes out, the background cannot serve it, and the popup
+       waits for a round trip that was never going to land. Android is asked
+       about through getPlatformInfo rather than the user agent, because that is
+       a question about the platform and not about a string. */
+    async downloadsApiCanLand() {
+        if (typeof browserAPI.downloads?.download !== 'function') return false;
+        if (this.platformOs === undefined) {
+            try {
+                this.platformOs = (await browserAPI.runtime.getPlatformInfo())?.os ?? null;
+            } catch {
+                this.platformOs = null;
+            }
+        }
+        return this.platformOs !== 'android';
+    }
+
     /* Three ways home, tried in the order of how well they land.
        The chosen folder is the PC's: the file arrives where Dropbox will carry
        it. The downloads API is Chrome's, and Firefox desktop's when it accepts
@@ -774,22 +794,32 @@ class PopupController {
                 return;
             }
 
-            if (typeof browserAPI.downloads?.download === 'function') {
-                const response = await browserAPI.runtime.sendMessage({
-                    type: 'X4_DOWNLOAD_ARTICLE',
-                    payload: {
-                        kind: 'generic_article',
-                        ...article
+            if (await this.downloadsApiCanLand()) {
+                // A refusal has to leave the next way open, and a refusal can
+                // arrive two ways: an answer saying no, or no answer at all -
+                // "Could not establish connection. Receiving end does not
+                // exist." when the background is not awake. Letting that one
+                // throw skipped the link below and turned a working road into
+                // an error message.
+                try {
+                    const response = await browserAPI.runtime.sendMessage({
+                        type: 'X4_DOWNLOAD_ARTICLE',
+                        payload: {
+                            kind: 'generic_article',
+                            ...article
+                        }
+                    });
+
+                    if (response && response.success) {
+                        this.ui.setDownloadButtonState('success', 'Saved to the browser’s download folder.');
+                        return;
                     }
-                });
 
-                if (response && response.success) {
-                    this.ui.setDownloadButtonState('success', 'Saved to the browser’s download folder.');
-                    return;
+                    // Firefox refuses some of what it is handed here; the link does not.
+                    console.warn('[Popup Controller] The downloads API refused the file:', response?.error);
+                } catch (error) {
+                    console.warn('[Popup Controller] The downloads API could not be reached:', error.message);
                 }
-
-                // Firefox refuses some of what it is handed here; the link does not.
-                console.warn('[Popup Controller] The downloads API refused the file:', response?.error);
             }
 
             const filename = await this.downloadThroughLink(article);
