@@ -25,6 +25,12 @@ const Settings = {
         DROPBOX_FOLDER: 'dropboxFolder',
         DROPBOX_SENT_FOLDER: 'dropboxSentFolder',
         DROPBOX_AUTO_SYNC: 'dropboxAutoSync',
+        // Where every article that reached the X3 is also copied, for
+        // KOReader on the Kindle. Empty means the copy is off.
+        DROPBOX_KINDLE_FOLDER: 'dropboxKindleFolder',
+        // Copies still to be uploaded there, kept in storage.local: they are
+        // file bytes, and belong to this phone.
+        KINDLE_PENDING: 'kindlePending',
         // Kept in storage.local, not sync: it is a credential, and the
         // authorisation is per device anyway.
         DROPBOX_REFRESH_TOKEN: 'dropboxRefreshToken',
@@ -59,7 +65,10 @@ const Settings = {
         // Named so it sorts first in Dropbox, which is why it exists.
         DROPBOX_FOLDER: 'AAA',
         DROPBOX_SENT_FOLDER: 'inviati',
-        DROPBOX_AUTO_SYNC: true
+        DROPBOX_AUTO_SYNC: true,
+        /* Empty on purpose, like the app key: the Kindle folder is the path of
+           one person's Dropbox app, and turning the copy on is a choice. */
+        DROPBOX_KINDLE_FOLDER: ''
     },
 
     /**
@@ -412,7 +421,7 @@ const Settings = {
     /**
      * Dropbox configuration. The refresh token lives in storage.local because it
      * is a credential; the rest is ordinary preference and syncs.
-     * @returns {Promise<{appKey: string, folder: string, sentFolder: string, refreshToken: string}>}
+     * @returns {Promise<{appKey: string, folder: string, sentFolder: string, autoSync: boolean, kindleFolder: string, refreshToken: string}>}
      */
     async getDropbox() {
         try {
@@ -420,7 +429,8 @@ const Settings = {
                 this.KEYS.DROPBOX_APP_KEY,
                 this.KEYS.DROPBOX_FOLDER,
                 this.KEYS.DROPBOX_SENT_FOLDER,
-                this.KEYS.DROPBOX_AUTO_SYNC
+                this.KEYS.DROPBOX_AUTO_SYNC,
+                this.KEYS.DROPBOX_KINDLE_FOLDER
             ]);
             const secret = await browserAPI.storage.local.get(this.KEYS.DROPBOX_REFRESH_TOKEN);
             const auto = preferences[this.KEYS.DROPBOX_AUTO_SYNC];
@@ -433,6 +443,7 @@ const Settings = {
                 // waiting to be asked is the wrong default. Undefined means
                 // "never chosen", not "off".
                 autoSync: auto === undefined ? this.DEFAULTS.DROPBOX_AUTO_SYNC : Boolean(auto),
+                kindleFolder: preferences[this.KEYS.DROPBOX_KINDLE_FOLDER] || this.DEFAULTS.DROPBOX_KINDLE_FOLDER,
                 refreshToken: secret[this.KEYS.DROPBOX_REFRESH_TOKEN] || ''
             };
         } catch (error) {
@@ -442,6 +453,7 @@ const Settings = {
                 folder: this.DEFAULTS.DROPBOX_FOLDER,
                 sentFolder: this.DEFAULTS.DROPBOX_SENT_FOLDER,
                 autoSync: this.DEFAULTS.DROPBOX_AUTO_SYNC,
+                kindleFolder: this.DEFAULTS.DROPBOX_KINDLE_FOLDER,
                 refreshToken: ''
             };
         }
@@ -458,7 +470,7 @@ const Settings = {
 
     /**
      * Save the Dropbox folder settings. Only the fields provided are written.
-     * @param {{appKey?: string, folder?: string, sentFolder?: string}} values
+     * @param {{appKey?: string, folder?: string, sentFolder?: string, kindleFolder?: string}} values
      * @returns {Promise<void>}
      */
     async setDropboxConfig(values = {}) {
@@ -466,6 +478,7 @@ const Settings = {
         if (typeof values.appKey === 'string') payload[this.KEYS.DROPBOX_APP_KEY] = values.appKey.trim();
         if (typeof values.folder === 'string') payload[this.KEYS.DROPBOX_FOLDER] = values.folder.trim();
         if (typeof values.sentFolder === 'string') payload[this.KEYS.DROPBOX_SENT_FOLDER] = values.sentFolder.trim();
+        if (typeof values.kindleFolder === 'string') payload[this.KEYS.DROPBOX_KINDLE_FOLDER] = values.kindleFolder.trim();
         if (!Object.keys(payload).length) return;
 
         await browserAPI.storage.sync.set(payload);
@@ -508,6 +521,33 @@ const Settings = {
             });
         } else {
             await browserAPI.storage.local.remove(this.KEYS.DROPBOX_VERIFIER);
+        }
+    },
+
+    /**
+     * Copies for the Kindle not yet on Dropbox, oldest first.
+     * @returns {Promise<Array<{filename: string, base64: string, addedAt: string}>>}
+     */
+    async getKindlePending() {
+        try {
+            const stored = await browserAPI.storage.local.get(this.KEYS.KINDLE_PENDING);
+            const list = stored[this.KEYS.KINDLE_PENDING];
+            return Array.isArray(list) ? list : [];
+        } catch (error) {
+            console.error('[Settings] Error reading Kindle copies:', error);
+            return [];
+        }
+    },
+
+    /**
+     * @param {Array<{filename: string, base64: string, addedAt: string}>} list empty clears it
+     * @returns {Promise<void>}
+     */
+    async setKindlePending(list) {
+        if (Array.isArray(list) && list.length) {
+            await browserAPI.storage.local.set({ [this.KEYS.KINDLE_PENDING]: list });
+        } else {
+            await browserAPI.storage.local.remove(this.KEYS.KINDLE_PENDING);
         }
     },
 

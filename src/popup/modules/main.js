@@ -43,6 +43,7 @@ class PopupController {
             onDropboxFolderChange: (event) => this.handleDropboxFolderChange(event),
             onDropboxAppKeyChange: (event) => this.handleDropboxAppKeyChange(event),
             onDropboxAutoSyncChange: (event) => this.handleDropboxAutoSyncChange(event),
+            onDropboxKindleFolderChange: (event) => this.handleDropboxKindleFolderChange(event),
             onSendAll: () => this.handleSendAll(),
             onStopQueue: () => { this.stopQueueRequested = true; this.ui.setQueueProgress('Stopping after the current transfer…'); },
             onOrganizeByDate: (event) => this.handleOrganizeByDate(event),
@@ -88,6 +89,8 @@ class PopupController {
         await this.completeDropboxIfPossible();
         // Not awaited: the popup stays responsive while Dropbox is contacted.
         this.autoSyncDropboxIfEnabled();
+        // Copies for the Kindle left behind by a send without internet.
+        this.flushKindleCopies();
     }
 
     async loadSettings() {
@@ -401,6 +404,7 @@ class PopupController {
             folder: config.folder,
             sentFolder: config.sentFolder,
             autoSync: config.autoSync,
+            kindleFolder: config.kindleFolder,
             // The box stays open across popup closures, which is the only way
             // this flow can work on Android.
             awaitingCode: Boolean(pending) && !config.refreshToken,
@@ -510,6 +514,90 @@ class PopupController {
             : 'Dropbox will only be checked when you press From Dropbox.');
     }
 
+    async handleDropboxKindleFolderChange(event) {
+        await window.Settings.setDropboxConfig({ kindleFolder: event.target.value });
+        await this.loadDropboxState(event.target.value.trim()
+            ? 'Kindle folder saved: articles sent to the X3 will be copied there.'
+            : 'Kindle copies turned off.');
+        // Turning it off drops what was still waiting, or it would go out the
+        // day the folder is filled in again, long after the fact.
+        if (!event.target.value.trim()) {
+            await window.Settings.setKindlePending([]);
+            this.ui.setKindleStatus('');
+        }
+    }
+
+    // --- Kindle copy ---------------------------------------------------------
+
+    /* Writes down the copy of something that has just reached the X3, before
+       trying to upload it: if the popup is closed or there is no internet, the
+       copy is still there to be sent next time. Does nothing while the Kindle
+       folder is empty, which is how the copy is turned off. */
+    async prepareKindleCopy(source) {
+        if (!window.Settings || !globalThis.KindleOutbox) return false;
+        // Queued files can be in the X3's own formats, which KOReader cannot open.
+        if (!source.article && !/\.epub$/i.test(source.filename || '')) return false;
+        const config = await window.Settings.getDropbox();
+        if (!config.kindleFolder) return false;
+
+        try {
+            let entry;
+            if (source.article) {
+                const response = await browserAPI.runtime.sendMessage({ type: 'X4_BUILD_EPUB', payload: source.article });
+                if (!response || !response.success) throw new Error((response && response.error) || 'EPUB generation failed');
+                entry = { filename: response.filename, base64: response.base64 };
+            } else {
+                entry = { filename: source.filename, base64: KindleOutbox.toBase64(await source.blob.arrayBuffer()) };
+            }
+            await window.Settings.setKindlePending(KindleOutbox.add(await window.Settings.getKindlePending(), entry));
+            return true;
+        } catch (error) {
+            this.ui.setKindleStatus(`Kindle copy could not be prepared: ${error.message}`);
+            return false;
+        }
+    }
+
+    /* Uploads whatever is waiting. Always says how it went, including when it
+       could not: a copy that silently stayed behind looks exactly like one that
+       arrived. Says nothing only when nothing was waiting. */
+    async flushKindleCopies() {
+        if (this.kindleFlushing || !window.Settings || !globalThis.KindleOutbox) return;
+        const config = await window.Settings.getDropbox();
+        if (!config.kindleFolder) return;
+        const pending = await window.Settings.getKindlePending();
+        if (!pending.length) return;
+
+        const waiting = count => `Kindle cop${count === 1 ? 'y' : 'ies'} waiting (${count})`;
+        if (!config.appKey || !config.refreshToken) {
+            this.ui.setKindleStatus(`${waiting(pending.length)}: connect Dropbox in Settings.`);
+            return;
+        }
+
+        this.kindleFlushing = true;
+        try {
+            this.ui.setKindleStatus('Copying for the Kindle…');
+            const token = await DropboxClient.accessTokenFrom(config.appKey, config.refreshToken);
+            const result = await KindleOutbox.flush(pending, entry =>
+                DropboxClient.upload(token, config.kindleFolder, entry.filename, SaveFolder.blobFromBase64(entry.base64)));
+
+            // Read again before writing: a send may have added a copy meanwhile.
+            await window.Settings.setKindlePending(KindleOutbox.settle(await window.Settings.getKindlePending(), result.sent));
+
+            const parts = [];
+            if (result.sent.length) {
+                parts.push(`${result.sent.length === 1 ? 'Kindle copy' : `${result.sent.length} Kindle copies`} saved to Dropbox at ${this.clockTime()}.`);
+            }
+            if (result.remaining.length) {
+                parts.push(`${waiting(result.remaining.length)}: ${KindleOutbox.describeError(result.error)}. Retried when the popup opens.`);
+            }
+            this.ui.setKindleStatus(parts.join(' '));
+        } catch (error) {
+            this.ui.setKindleStatus(`${waiting(pending.length)}: ${KindleOutbox.describeError(error.message)}. Retried when the popup opens.`);
+        } finally {
+            this.kindleFlushing = false;
+        }
+    }
+
     /* Runs once the popup is on screen, and deliberately not awaited by init():
        the window has to be usable straight away, even when Dropbox is slow or
        the phone is offline. */
@@ -595,6 +683,7 @@ class PopupController {
         } finally {
             this.sendingQueue = false;
             await this.refreshQueue();
+            this.flushKindleCopies();
         }
     }
 
@@ -610,6 +699,12 @@ class PopupController {
             const targetDirectory = TransferUtils.destination(this.settings.targetFolder, this.settings.organizeByDate, item.contentDate || item.createdAt);
             const response = await browserAPI.runtime.sendMessage({ type: 'X4_UPLOAD_QUEUE_ITEM', payload: { itemId: current.id, targetDirectory }, settings: { firmwareType: this.settings.firmwareType, deviceIp: this.settings.deviceIp } });
             if (!response?.success) throw new Error(response?.error || 'Upload failed.');
+            // Before the item is removed: it still holds the article or the file.
+            // A batch uploads the copies once at the end, not between X3 sends.
+            const copied = await this.prepareKindleCopy(item.kind === 'article'
+                ? { article: item.article }
+                : { filename: item.filename, blob: item.blob });
+            if (copied && !batch) this.flushKindleCopies();
             await removeItem(item.id);
             this.ui.setQueueProgress(`Sent: ${item.displayName}`);
             await this.refreshQueue();
@@ -689,6 +784,11 @@ class PopupController {
 
             if (response && response.success) {
                 this.ui.setSendButtonState('success', response.message);
+
+                // Only what the X3 took: a download fallback means it did not.
+                if (!response.downloadTriggered && await this.prepareKindleCopy({ article })) {
+                    this.flushKindleCopies();
+                }
 
                 // Refresh files after delay
                 setTimeout(async () => {

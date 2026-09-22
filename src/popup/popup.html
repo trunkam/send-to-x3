@@ -74,6 +74,7 @@
         <button id="stop-queue-btn" class="send-btn secondary hidden"><span class="btn-icon">⏹</span><span class="btn-text">Stop</span></button>
       </div>
       <div id="queue-progress" class="hint hidden"></div>
+      <div id="kindle-status" class="hint hidden"></div>
       <ul id="queue-items" class="file-items queue-items"></ul>
     </section>
 
@@ -176,6 +177,10 @@
           <input type="text" id="dropbox-folder" class="settings-input" placeholder="AAA" value="AAA">
           <p class="hint">Where the iPad and the PC drop their files. Imported files are moved into a "<span id="dropbox-sent-label">inviati</span>" sub-folder, never deleted.</p>
           <label class="settings-sub-option checkbox-option"><input type="checkbox" id="dropbox-auto-sync" checked> Check Dropbox when the popup opens</label>
+
+          <label class="input-label" for="dropbox-kindle-folder">Kindle folder on Dropbox</label>
+          <input type="text" id="dropbox-kindle-folder" class="settings-input" placeholder="e.g. /Apps/kindle-x3 — empty is off">
+          <p class="hint">Every article that reaches the X3 is also copied here, for KOReader on a Kindle. Without internet the copy waits and goes out the next time the popup opens. Use the folder's real name as your Dropbox shows it: an app folder is under "Apps", or "Applicazioni" in an Italian Dropbox.</p>
           <p id="dropbox-status" class="hint">Not connected.</p>
           <div class="button-group">
             <button id="dropbox-connect-btn" class="send-btn secondary"><span class="btn-icon">🔗</span><span class="btn-text">Connect</span></button>
@@ -203,6 +208,7 @@
   <script src="../utils/newsletter_names.js"></script>
   <script src="../utils/html_article.js"></script>
   <script src="../utils/dropbox_client.js"></script>
+  <script src="../utils/kindle_outbox.js"></script>
   <script src="../utils/save_folder.js"></script>
   <script src="../utils/blob_download.js"></script>
   <script src="../utils/article_cleanup.js"></script>

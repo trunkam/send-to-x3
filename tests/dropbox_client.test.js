@@ -166,3 +166,47 @@ describe('DropboxClient PKCE', () => {
         assert.ok(!url.includes('redirect_uri'), url);
     });
 });
+
+describe('DropboxClient.upload', () => {
+    // Replaces fetch for one call, and restores it only after the call is done.
+    async function withStubbedFetch(reply, run) {
+        const original = globalThis.fetch;
+        const calls = [];
+        globalThis.fetch = async (url, options) => {
+            calls.push({ url, options });
+            return { ok: reply.ok, status: reply.status, text: async () => reply.body };
+        };
+        try {
+            return await run(calls);
+        } finally {
+            globalThis.fetch = original;
+        }
+    }
+
+    it('overwrites a file of the same name, so a resent article replaces the broken copy', async () => {
+        await withStubbedFetch({ ok: true, status: 200, body: '{"name":"x"}' }, async calls => {
+            await DropboxClient.upload('TOKEN', '/Apps/kindle-x3/', '09-22 Title.epub', new Uint8Array([1, 2]));
+            const { url, options } = calls[0];
+            assert.equal(url, 'https://content.dropboxapi.com/2/files/upload');
+            assert.equal(options.headers.Authorization, 'Bearer TOKEN');
+            const arg = JSON.parse(options.headers['Dropbox-API-Arg']);
+            assert.equal(arg.path, '/Apps/kindle-x3/09-22 Title.epub');
+            assert.equal(arg.mode, 'overwrite');
+        });
+    });
+
+    it('keeps the header ASCII when the title has a typographic apostrophe', async () => {
+        await withStubbedFetch({ ok: true, status: 200, body: '{}' }, async calls => {
+            await DropboxClient.upload('T', 'Kindle', 'L' + TYPOGRAPHIC_APOSTROPHE + 'Onu.epub', new Uint8Array([1]));
+            const header = calls[0].options.headers['Dropbox-API-Arg'];
+            assert.ok(/^[\x00-\x7e]*$/.test(header));
+            assert.equal(JSON.parse(header).path, '/Kindle/L' + TYPOGRAPHIC_APOSTROPHE + 'Onu.epub');
+        });
+    });
+
+    it('reports a refused upload in words', async () => {
+        await withStubbedFetch({ ok: false, status: 401, body: 'expired' }, async () => {
+            await assert.rejects(DropboxClient.upload('T', 'Kindle', 'a.epub', new Uint8Array([1])), /Re-authorise/);
+        });
+    });
+});

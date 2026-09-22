@@ -31,6 +31,7 @@ export class UIManager {
             queueCount: document.getElementById('queue-count'),
             queueItems: document.getElementById('queue-items'),
             queueProgress: document.getElementById('queue-progress'),
+            kindleStatus: document.getElementById('kindle-status'),
             organizeByDate: document.getElementById('organize-by-date'),
             deviceLoading: document.getElementById('device-loading'),
             deviceConnected: document.getElementById('device-connected'),
@@ -58,6 +59,7 @@ export class UIManager {
             dropboxAutoSync: document.getElementById('dropbox-auto-sync'),
             dropboxAppKeyInput: document.getElementById('dropbox-app-key'),
             dropboxFolderInput: document.getElementById('dropbox-folder'),
+            dropboxKindleFolderInput: document.getElementById('dropbox-kindle-folder'),
             dropboxSentLabel: document.getElementById('dropbox-sent-label'),
             dropboxStatus: document.getElementById('dropbox-status'),
             dropboxConnectBtn: document.getElementById('dropbox-connect-btn'),
@@ -127,6 +129,17 @@ export class UIManager {
         if (typeof state.autoSync === 'boolean' && this.elements.dropboxAutoSync) {
             this.elements.dropboxAutoSync.checked = state.autoSync;
         }
+        if (typeof state.kindleFolder === 'string' && this.elements.dropboxKindleFolderInput) {
+            this.elements.dropboxKindleFolderInput.value = state.kindleFolder;
+        }
+    }
+
+    // Its own line, not the queue's: the Dropbox check on open writes there,
+    // and the two would overwrite each other.
+    setKindleStatus(message = '') {
+        if (!this.elements.kindleStatus) return;
+        this.elements.kindleStatus.textContent = message;
+        this.elements.kindleStatus.classList.toggle('hidden', !message);
     }
 
     setupListeners(handlers) {
@@ -142,6 +155,7 @@ export class UIManager {
         if (handlers.onDropboxCodeSave) this.elements.dropboxCodeSaveBtn.addEventListener('click', handlers.onDropboxCodeSave);
         if (handlers.onDropboxFolderChange) this.elements.dropboxFolderInput.addEventListener('change', handlers.onDropboxFolderChange);
         if (handlers.onDropboxAppKeyChange) this.elements.dropboxAppKeyInput.addEventListener('change', handlers.onDropboxAppKeyChange);
+        if (handlers.onDropboxKindleFolderChange) this.elements.dropboxKindleFolderInput.addEventListener('change', handlers.onDropboxKindleFolderChange);
         if (handlers.onSendAll) this.elements.sendAllBtn.addEventListener('click', handlers.onSendAll);
         if (handlers.onStopQueue) this.elements.stopQueueBtn.addEventListener('click', handlers.onStopQueue);
         if (handlers.onOrganizeByDate) this.elements.organizeByDate.addEventListener('change', handlers.onOrganizeByDate);

@@ -170,6 +170,26 @@ const DropboxClient = {
         return response.blob();
     },
 
+    /* Writes one file into a folder, for KOReader on the Kindle to pick up.
+       Overwrite, not add: an article sent again - a WSJ fixed after the fact -
+       has the same name, and should replace the broken copy rather than sit
+       next to it as "(1)". Missing parent folders are created by Dropbox. */
+    async upload(token, folder, name, data) {
+        const path = this.normalizeFolder(folder) + '/' + name;
+        const response = await fetch(this.CONTENT_URL + '/files/upload', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Content-Type': 'application/octet-stream',
+                'Dropbox-API-Arg': this.asciiJson({ path, mode: 'overwrite', mute: true })
+            },
+            body: data
+        });
+        const text = await response.text();
+        if (!response.ok) throw new Error(this.describeError(response.status, text));
+        return text ? JSON.parse(text) : {};
+    },
+
     /* Moved, not deleted: a file that failed to convert stays recoverable by
        hand, and the folder still reads as "what is left to send". */
     async moveToSent(token, file, folder, sentFolder) {
