@@ -239,6 +239,10 @@ export function extractArticle() {
                         author,
                         date,
                         wordCount,
+                        // Which road the article took, so the popup can say it.
+                        // On Android there is no console to ask afterwards.
+                        extraction: 'readability',
+                        readabilityLength,
                         body,
                         rawText: textContent,
                         sourceUrl: window.location.href
@@ -303,18 +307,15 @@ export function extractArticle() {
             if (normalizedDate) date = normalizedDate;
         }
 
-        // Create simple HTML body. This is plain page text on its way into a
-        // file that gets parsed as XML, so all three of XML's dangerous
-        // characters have to go - the ampersand included. A WSJ article ends on
-        // "Dow Jones & Company": left bare, that one character makes the EPUB
-        // ill-formed from there to the end, and the X3 stops turning pages.
-        // The ampersand goes first, or it would escape its own escapes.
-        const paragraphs = textContent.split(/\n\n+/).filter(p => p.trim().length > 0);
-        const asXmlText = (text) => text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-        body = paragraphs.map(p => `<p>${asXmlText(p.trim())}</p>`).join('\n');
+        // Hand back the paragraphs rather than a finished body. Whatever the
+        // site renders inside the block we picked comes along with the article -
+        // ad slots, the byline broken into one line per name, the author
+        // biographies - and throwing that out is the popup's job, where
+        // ArticleCleanup is a normal module with tests. This function is
+        // stringified and injected, so nothing here can be imported or tested.
+        const paragraphs = textContent.split(/\n\n+/)
+            .map(p => p.trim())
+            .filter(p => p.length > 0);
 
         return {
             success: true,
@@ -324,7 +325,9 @@ export function extractArticle() {
                 author,
                 date,
                 wordCount,
-                body,
+                extraction: 'fallback',
+                readabilityLength,
+                bodyParagraphs: paragraphs,
                 rawText: textContent,
                 sourceUrl: window.location.href
             }

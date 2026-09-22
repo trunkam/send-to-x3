@@ -58,9 +58,9 @@ export class ArticleManager {
             console.log('[Article Manager] Extraction result:', result);
 
             if (result && result.success) {
-                this.articleData = result.article;
+                this.articleData = this.finishArticle(result.article);
                 this.lastFailureDetail = null;
-                return result.article;
+                return this.articleData;
             } else {
                 console.log('[Article Manager] No article found:', result?.reason);
                 this.lastFailureDetail = result?.detail || result?.reason || null;
@@ -71,6 +71,38 @@ export class ArticleManager {
             console.error('[Article Manager] Article check error:', error);
             throw error;
         }
+    }
+
+    /* The fallback hands back paragraphs, not a body: it reads the page text
+       off the biggest block it can find, so the site's furniture rides along.
+       Dropping that and building the body happens here, where ArticleCleanup is
+       an ordinary module with tests - inside the injected function it could be
+       neither imported nor tested.
+
+       Readability's own output arrives finished and is left alone. */
+    finishArticle(article) {
+        if (article.extraction !== 'fallback' || !Array.isArray(article.bodyParagraphs)) {
+            return article;
+        }
+
+        const cleanup = globalThis.ArticleCleanup;
+        // No quiet way out: building the body here without it would mean escaping
+        // the text by hand a second time, and the last hand-written escape is the
+        // one that let a WSJ ampersand cut the article in half.
+        if (!cleanup) throw new Error('ArticleCleanup did not load');
+
+        const { kept, dropped } = cleanup.stripChrome(article.bodyParagraphs);
+        const rawText = kept.join('\n\n');
+        console.log('[Article Manager] Fallback cleanup dropped', dropped.length, 'of',
+            article.bodyParagraphs.length, 'paragraphs');
+
+        return {
+            ...article,
+            body: cleanup.toBody(kept),
+            rawText,
+            wordCount: rawText.split(/\s+/).filter(Boolean).length,
+            droppedParagraphs: dropped.length
+        };
     }
 
     getArticleData() {
