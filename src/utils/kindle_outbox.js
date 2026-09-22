@@ -1,15 +1,15 @@
 /* The copies waiting to reach the Kindle's folder on Dropbox.
 
-   The X3 stays the main reader: an article is copied for the Kindle only once
-   it has reached the X3, so the Kindle mirrors what is on the X3 and nothing
-   else. The two trips need different networks, though. The X3 sits on the
-   phone's hotspot and answers without internet; Dropbox needs internet. In the
-   underground the first works and the second does not, so a copy is written
-   down here before it is attempted, and whatever did not go through is tried
-   again the next time the popup opens.
+   The X3 stays the main reader, but the Kindle does not wait for it: an
+   article is copied the moment it enters the extension - sent, queued or
+   imported - so an article queued while the X3 is away is on the Kindle all
+   the same. Dropbox needs internet, and the phone does not always have it: in
+   the underground the X3 still answers on the hotspot, Dropbox does not. So a
+   copy is written down here before it is attempted, and whatever did not go
+   through is tried again the next time the popup opens.
 
-   The bytes are kept, not the article: what reaches the Kindle is exactly the
-   file the X3 got. This module holds no storage and no network - both come in
+   The bytes are kept, not the article, so the copy does not have to be rebuilt
+   from an article that may have left the queue by then. This module holds no storage and no network - both come in
    as arguments - so it stays testable under Node. */
 const KindleOutbox = {
     /* One entry per filename. An article sent again replaces its waiting copy

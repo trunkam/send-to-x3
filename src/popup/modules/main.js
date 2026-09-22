@@ -339,6 +339,8 @@ class PopupController {
             await addArticle(this.articleManager.articleData);
             await this.refreshQueue();
             this.ui.setQueueProgress('Article added to the local queue.');
+            // The X3 may be days away; the Kindle does not have to wait for it.
+            if (await this.prepareKindleCopy({ article: this.articleManager.articleData })) this.flushKindleCopies();
         } catch (error) {
             this.ui.setQueueProgress(error.message);
         }
@@ -349,18 +351,23 @@ class PopupController {
      * Kept separate so both paths share the HTML/EPUB decision instead of
      * drifting apart.
      * @param {File} file
+     * The Kindle copy is written down here too, and uploaded by the caller once
+     * the whole batch is in.
      * @returns {Promise<void>} rejects with the reason the file could not be queued
      */
     async importOneFile(file) {
         if (HtmlArticle.isHtmlFilename(file.name)) {
             // Raw HTML from the iPad Shortcut: queue it as an article, so it
             // gets the same EPUB, filename and date folder as an extracted page.
-            await addArticle(HtmlArticle.parse(await file.text(), {
+            const article = HtmlArticle.parse(await file.text(), {
                 filename: file.name,
                 date: TransferUtils.dateFolder(new Date(file.lastModified || Date.now()))
-            }));
+            });
+            await addArticle(article);
+            await this.prepareKindleCopy({ article });
         } else {
             await addFiles([file]);
+            await this.prepareKindleCopy({ filename: file.name, blob: file });
         }
     }
 
@@ -385,6 +392,7 @@ class PopupController {
         await this.refreshQueue();
         const summary = added ? `${added} file${added === 1 ? '' : 's'} added to the queue.` : '';
         this.ui.setQueueProgress([summary, ...failures].join(' ').trim());
+        if (added) this.flushKindleCopies();
     }
 
     // --- Dropbox -----------------------------------------------------------
@@ -529,10 +537,12 @@ class PopupController {
 
     // --- Kindle copy ---------------------------------------------------------
 
-    /* Writes down the copy of something that has just reached the X3, before
-       trying to upload it: if the popup is closed or there is no internet, the
-       copy is still there to be sent next time. Does nothing while the Kindle
-       folder is empty, which is how the copy is turned off. */
+    /* Writes down the copy of an article the moment it enters the extension -
+       sent, queued or imported - whether or not the X3 is around: the Kindle
+       gets everything, and does not wait for the X3. Written down before any
+       upload is tried, so with the popup closed or no internet the copy is
+       still there to be sent next time. Does nothing while the Kindle folder is
+       empty, which is how the copy is turned off. */
     async prepareKindleCopy(source) {
         if (!window.Settings || !globalThis.KindleOutbox) return false;
         // Queued files can be in the X3's own formats, which KOReader cannot open.
@@ -655,6 +665,7 @@ class PopupController {
                 ? `${added} file${added === 1 ? '' : 's'} added from Dropbox at ${this.clockTime()}.`
                 : 'Nothing was imported.';
             this.ui.setQueueProgress([summary, ...failures].join(' ').trim());
+            if (added) this.flushKindleCopies();
         } catch (error) {
             this.ui.setQueueProgress(`Dropbox check failed at ${this.clockTime()}: ${error.message}`);
         } finally {
@@ -683,7 +694,6 @@ class PopupController {
         } finally {
             this.sendingQueue = false;
             await this.refreshQueue();
-            this.flushKindleCopies();
         }
     }
 
@@ -699,12 +709,9 @@ class PopupController {
             const targetDirectory = TransferUtils.destination(this.settings.targetFolder, this.settings.organizeByDate, item.contentDate || item.createdAt);
             const response = await browserAPI.runtime.sendMessage({ type: 'X4_UPLOAD_QUEUE_ITEM', payload: { itemId: current.id, targetDirectory }, settings: { firmwareType: this.settings.firmwareType, deviceIp: this.settings.deviceIp } });
             if (!response?.success) throw new Error(response?.error || 'Upload failed.');
-            // Before the item is removed: it still holds the article or the file.
-            // A batch uploads the copies once at the end, not between X3 sends.
-            const copied = await this.prepareKindleCopy(item.kind === 'article'
-                ? { article: item.article }
-                : { filename: item.filename, blob: item.blob });
-            if (copied && !batch) this.flushKindleCopies();
+            // No Kindle copy here: it was made when the item entered the queue.
+            // A second one would carry today's date in its name, not the first
+            // one's, and sit next to it on the Kindle.
             await removeItem(item.id);
             this.ui.setQueueProgress(`Sent: ${item.displayName}`);
             await this.refreshQueue();
@@ -785,11 +792,6 @@ class PopupController {
             if (response && response.success) {
                 this.ui.setSendButtonState('success', response.message);
 
-                // Only what the X3 took: a download fallback means it did not.
-                if (!response.downloadTriggered && await this.prepareKindleCopy({ article })) {
-                    this.flushKindleCopies();
-                }
-
                 // Refresh files after delay
                 setTimeout(async () => {
                     const files = await this.fileManager.loadFolderFiles(this.settings);
@@ -802,6 +804,9 @@ class PopupController {
             console.error('[Popup Controller] Send error:', error);
             this.ui.setSendButtonState('error', error.message);
         }
+
+        // Whatever the X3 made of it: the Kindle copy does not depend on it.
+        if (await this.prepareKindleCopy({ article })) this.flushKindleCopies();
     }
 
     // --- Save folder ---------------------------------------------------------
