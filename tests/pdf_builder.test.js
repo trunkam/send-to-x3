@@ -167,6 +167,70 @@ describe('PdfBuilder.build', () => {
     });
 });
 
+describe('PdfBuilder.build with pictures', () => {
+    const zlib = require('node:zlib');
+    const ArticleImages = require('../src/utils/article_images.js');
+    // A real 16x8 gray JPEG, three channels as a canvas writes it.
+    const JPEG = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDARESEhgVGC8aGi9jQjhCY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2P/wAARCAAIABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwAooooA/9k=';
+
+    async function article() {
+        const png = await ArticleImages.encodeGrayPng(new Uint8Array(12 * 4).fill(90), 12, 4,
+            async bytes => new Uint8Array(zlib.deflateSync(bytes)));
+        return {
+            title: 'Pictures',
+            body: '<p>Before.</p><figure><img src="x3img:0" alt="chart"/></figure><p>Between.</p>' +
+                '<div class="x3-image"><img src="x3img:1" alt=""/></div><img src="https://remote/x.jpg"><img src="x3img:7"/>',
+            images: [
+                { alt: 'chart', x3: { type: 'image/png', base64: 'AA==' }, kindle: { type: 'image/png', base64: Buffer.from(png).toString('base64') } },
+                { alt: '', x3: { type: 'image/jpeg', base64: JPEG } }
+            ]
+        };
+    }
+
+    it('embeds a PNG as its compressed rows, and a JPEG as it is', async () => {
+        const pdf = latin1(PdfBuilder.build(await article()));
+        assert.ok(pdf.includes('/Subtype /Image /Width 12 /Height 4 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /DecodeParms << /Predictor 15 /Colors 1 /BitsPerComponent 8 /Columns 12 >>'));
+        assert.ok(pdf.includes('/Subtype /Image /Width 16 /Height 8 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode'));
+    });
+
+    it('takes the Kindle version when there is one, and the X3 one otherwise', async () => {
+        // The X3 version of the chart is not a PNG at all: had it been chosen, no image.
+        const pdf = latin1(PdfBuilder.build(await article()));
+        assert.equal((pdf.match(/\/Subtype \/Image/g) || []).length, 2);
+    });
+
+    it('draws each picture where it stood in the text', async () => {
+        const pdf = latin1(PdfBuilder.build(await article()));
+        const before = pdf.indexOf('(Before.) Tj');
+        const chart = pdf.indexOf('/Im0 Do');
+        const between = pdf.indexOf('(Between.) Tj');
+        const photo = pdf.indexOf('/Im1 Do');
+        assert.ok(before < chart && chart < between && between < photo, `${before} ${chart} ${between} ${photo}`);
+        assert.ok(/\/XObject << \/Im0 \d+ 0 R \/Im1 \d+ 0 R >>/.test(pdf));
+    });
+
+    it('leaves out a picture on the internet and one that does not exist', async () => {
+        const pdf = latin1(PdfBuilder.build(await article()));
+        assert.ok(!pdf.includes('/Im7'));
+        assert.ok(!pdf.includes('remote'));
+    });
+
+    it('keeps the xref right with binary pictures in the file', async () => {
+        const pdf = latin1(PdfBuilder.build(await article()));
+        const xrefAt = Number(/startxref\n(\d+)\n%%EOF\n$/.exec(pdf)[1]);
+        const [, count] = /^xref\n0 (\d+)\n/.exec(pdf.slice(xrefAt));
+        pdf.slice(xrefAt).split('\n').slice(3, 2 + Number(count)).forEach((entry, index) => {
+            assert.ok(pdf.startsWith(`${index + 1} 0 obj\n`, Number(entry.slice(0, 10))), `object ${index + 1}`);
+        });
+    });
+
+    it('still makes the PDF when a picture is not what it claims to be', () => {
+        const pdf = latin1(PdfBuilder.build({ title: 't', body: '<img src="x3img:0"/><p>text</p>', images: [{ kindle: { type: 'image/png', base64: 'bm90IGEgcG5n' } }] }));
+        assert.ok(pdf.includes('(text) Tj'));
+        assert.ok(!pdf.includes('/Subtype /Image'));
+    });
+});
+
 describe('PdfBuilder.filenameFor', () => {
     it('gives the PDF the name of the EPUB it sits beside', () => {
         assert.equal(PdfBuilder.filenameFor('09-24 Titolo - ilpost.it - 2026-09-24.epub'), '09-24 Titolo - ilpost.it - 2026-09-24.pdf');

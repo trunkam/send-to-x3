@@ -65,6 +65,9 @@ const ArticleCleanup = {
         /^ascolta$/i
     ],
 
+    // What the extraction leaves where a picture was: see ArticleImages.marker.
+    IMAGE_MARKER: /^\[\[x3-image:\d+\]\]$/,
+
     // A paragraph this long is prose, not a label: it anchors the rules that
     // need to know where the article proper starts.
     BODY_LENGTH: 200,
@@ -102,6 +105,8 @@ const ArticleCleanup = {
         const firstBody = afterTail.findIndex(p => p.length >= this.BODY_LENGTH);
 
         const kept = afterTail.filter((paragraph, index) => {
+            // A picture's stand-in is short like byline debris, and is not.
+            if (this.IMAGE_MARKER.test(paragraph)) return true;
             if (this.isChromeLine(paragraph)) { drop(paragraph, 'chrome'); return false; }
             if (this.isAiNotice(paragraph)) { drop(paragraph, 'ai-notice'); return false; }
             if (this.isOrphanCaption(paragraph)) { drop(paragraph, 'caption'); return false; }
@@ -129,7 +134,14 @@ const ArticleCleanup = {
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
-        return (paragraphs || []).map(p => `<p>${asXmlText(String(p).trim())}</p>`).join('\n');
+        return (paragraphs || []).map((p) => {
+            const text = String(p).trim();
+            // The picture itself is added by ArticleImages, which reads this src.
+            if (this.IMAGE_MARKER.test(text)) {
+                return `<div class="x3-image"><img src="${text.slice(2, -2)}" alt=""/></div>`;
+            }
+            return `<p>${asXmlText(text)}</p>`;
+        }).join('\n');
     },
 
     cutTail(paragraphs, drop) {
@@ -162,9 +174,10 @@ const ArticleCleanup = {
         return firstBody > 0 && index < firstBody && paragraph.length < this.CRUMB_LENGTH;
     },
 
-    /* A caption with no picture above it describes nothing. The EPUB carries no
-       images - they are left out for the reader's sake - so every caption in it
-       is an orphan. Put images back and this rule has to go with them. */
+    /* A photo credit in capitals says nothing on an e-reader. It was written
+       for captions with no picture above them, when the EPUB carried none;
+       pictures are back, but a credit line under one is still noise, so the
+       rule stays. It takes a caption ending in a credit along with it. */
     isOrphanCaption(paragraph) {
         const credit = paragraph.match(this.PHOTO_CREDIT);
         return Boolean(credit && credit[0].includes('/'));

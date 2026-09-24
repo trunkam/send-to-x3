@@ -60,6 +60,9 @@ export class ArticleManager {
             if (result && result.success) {
                 this.articleData = this.finishArticle(result.article);
                 this.lastFailureDetail = null;
+                // Pictures take a download each: the article is shown now, and
+                // whatever sends or queues it waits for readyArticle().
+                this.imagesReady = this.prepareImages();
                 return this.articleData;
             } else {
                 console.log('[Article Manager] No article found:', result?.reason);
@@ -106,6 +109,30 @@ export class ArticleManager {
     }
 
     getArticleData() {
+        return this.articleData;
+    }
+
+    /* Replaces the article with one whose pictures are made for both readers
+       (ArticleImages), and keeps a count of what went in and what did not,
+       charts the page could not turn into pictures included. */
+    async prepareImages() {
+        const article = this.articleData;
+        this.imageReport = null;
+        if (!article || !globalThis.ArticleImages) return article;
+        try {
+            const { article: prepared, added, failed } = await ArticleImages.prepare(article);
+            if (this.articleData === article) this.articleData = prepared;
+            this.imageReport = { added, failed: failed + (article.chartsFailed || 0) };
+        } catch (error) {
+            console.error('[Article Manager] Pictures not prepared:', error);
+            this.imageReport = { added: 0, failed: 0, error: error.message };
+        }
+        return this.articleData;
+    }
+
+    // The article as it should be sent: with its pictures, once they are ready.
+    async readyArticle() {
+        if (this.imagesReady) await this.imagesReady;
         return this.articleData;
     }
 }

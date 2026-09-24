@@ -22,6 +22,7 @@ export class UIManager {
             articleWords: document.getElementById('article-words'),
             errorMessage: document.getElementById('error-message'),
             articleStatus: document.getElementById('article-status'),
+            articleImages: document.getElementById('article-images'),
             sendBtn: document.getElementById('send-btn'),
             downloadBtn: document.getElementById('download-btn'),
             queueArticleBtn: document.getElementById('queue-article-btn'),
@@ -598,6 +599,15 @@ export class UIManager {
         if (!status) return;
         status.textContent = message;
         status.classList.toggle('hidden', !message);
+    }
+
+    // Its own line: a send result on the status line must not hide how many
+    // pictures made it into the article.
+    setArticleImages(message = '') {
+        const line = this.elements.articleImages;
+        if (!line) return;
+        line.textContent = message;
+        line.classList.toggle('hidden', !message);
     }
 
     setDownloadButtonState(state, message = '') {

@@ -144,6 +144,25 @@ describe('ArticleCleanup.toBody', () => {
         assert.equal(ArticleCleanup.toBody([]), '');
         assert.equal(ArticleCleanup.toBody(null), '');
     });
+
+    it('turns a picture stand-in back into a picture for ArticleImages to fill', () => {
+        assert.equal(ArticleCleanup.toBody(['one', '[[x3-image:2]]']),
+            '<p>one</p>\n<div class="x3-image"><img src="x3-image:2" alt=""/></div>');
+    });
+});
+
+describe('ArticleCleanup.stripChrome - pictures', () => {
+    it('keeps a chart that sits above the first paragraph of prose', () => {
+        // Short, and before the prose starts: exactly what byline debris looks like.
+        const { kept } = ArticleCleanup.stripChrome(['By', '[[x3-image:0]]', prose('paragraph')]);
+        assert.deepEqual(kept, ['[[x3-image:0]]', prose('paragraph')]);
+    });
+
+    it('still cuts a picture that sits in the tail with the comments', () => {
+        const paragraphs = [prose('a'), prose('b'), prose('c'), 'Show Conversation (12)', '[[x3-image:1]]'];
+        const { kept } = ArticleCleanup.stripChrome(paragraphs);
+        assert.equal(kept.includes('[[x3-image:1]]'), false);
+    });
 });
 
 describe('ArticleCleanup.stripChrome - Italian pages', () => {

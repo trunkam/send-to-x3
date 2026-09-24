@@ -8,8 +8,11 @@
    the rest of Western Europe, typographic quotes included. What falls outside it
    (Greek, Cyrillic, emoji) loses its accent, turns into "?", or is dropped.
 
-   Text only, like the EPUB: images are left out. No DOM and no network: it
-   runs in the background script and under Node's tests alike. */
+   Pictures come from the article, as ArticleImages made them: the Kindle's
+   larger version, embedded as it is - a JPEG stays a JPEG, a PNG's compressed
+   pixels go in without being decoded. Text is ASCII in the file; picture
+   streams are the only binary. No DOM and no network: it runs in the
+   background script and under Node's tests alike. */
 const PdfBuilder = (() => {
     // Advance widths in thousandths of the font size, WinAnsi codes 32-255,
     // from Adobe's AFM files for the standard fonts.
@@ -331,6 +334,16 @@ const PdfBuilder = (() => {
                 case 'i': case 'em': case 'cite': case 'var': case 'dfn': italic++; break;
                 case 'code': case 'kbd': case 'samp': case 'tt': mono++; break;
                 case 'a': links.push(linkTarget(attribute(attributes, 'href'))); break;
+                case 'img': {
+                    // Only the pictures ArticleImages made; an address on the
+                    // internet is not something a PDF can hold.
+                    const picture = /^x3img:(\d+)$/.exec(attribute(attributes, 'src'));
+                    if (picture) {
+                        flush();
+                        blocks.push({ kind: 'image', index: Number(picture[1]), indent: indent(), runs: [] });
+                    }
+                    break;
+                }
                 case 'br': addText('\n'); break;
                 case 'hr': flush(); blocks.push({ kind: 'rule', indent: indent(), runs: [] }); break;
                 case 'pre': pre++; start('pre'); break;
@@ -364,6 +377,99 @@ const PdfBuilder = (() => {
         }
         flush();
         return blocks;
+    }
+
+    // --- Pictures ------------------------------------------------------------
+
+    // The largest version first: the PDF is read on screens and paper, not on a
+    // six-inch reader.
+    const PICTURE_VERSIONS = ['kindle', 'x3'];
+
+    // Pictures are handled as byte strings, one char per byte, like the file.
+    function readUint32(bytes, offset) {
+        return ((bytes.charCodeAt(offset) << 24) >>> 0) + (bytes.charCodeAt(offset + 1) << 16) +
+            (bytes.charCodeAt(offset + 2) << 8) + bytes.charCodeAt(offset + 3);
+    }
+
+    // Size and channels from a JPEG's frame header; PDF takes the JPEG as it is.
+    function jpegInfo(bytes) {
+        if (bytes.charCodeAt(0) !== 0xFF || bytes.charCodeAt(1) !== 0xD8) return null;
+        let i = 2;
+        while (i + 9 < bytes.length) {
+            if (bytes.charCodeAt(i) !== 0xFF) return null;
+            const marker = bytes.charCodeAt(i + 1);
+            if (marker === 0xFF) { i++; continue; }
+            const length = (bytes.charCodeAt(i + 2) << 8) | bytes.charCodeAt(i + 3);
+            const isFrame = marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC;
+            if (isFrame) {
+                return {
+                    height: (bytes.charCodeAt(i + 5) << 8) | bytes.charCodeAt(i + 6),
+                    width: (bytes.charCodeAt(i + 7) << 8) | bytes.charCodeAt(i + 8),
+                    components: bytes.charCodeAt(i + 9)
+                };
+            }
+            i += 2 + length;
+        }
+        return null;
+    }
+
+    /* A PNG's compressed pixels go into the PDF untouched: PDF decompresses
+       with the same zlib and undoes the same per-row filters (Predictor 15).
+       8-bit gray or RGB without interlacing only - what ArticleImages writes;
+       anything else is left out rather than drawn wrong. */
+    function pngInfo(bytes) {
+        if (bytes.slice(0, 8) !== '\x89PNG\r\n\x1a\n') return null;
+        let i = 8;
+        let info = null;
+        let data = '';
+        while (i + 8 <= bytes.length) {
+            const length = readUint32(bytes, i);
+            const type = bytes.slice(i + 4, i + 8);
+            const body = bytes.slice(i + 8, i + 8 + length);
+            if (type === 'IHDR') {
+                info = { width: readUint32(body, 0), height: readUint32(body, 4), depth: body.charCodeAt(8), colorType: body.charCodeAt(9), interlace: body.charCodeAt(12) };
+            } else if (type === 'IDAT') {
+                data += body;
+            } else if (type === 'IEND') {
+                break;
+            }
+            i += 12 + length;
+        }
+        const colors = info && { 0: 1, 2: 3 }[info.colorType];
+        if (!info || !colors || info.depth !== 8 || info.interlace !== 0 || !data) return null;
+        return { width: info.width, height: info.height, colors, data };
+    }
+
+    /**
+     * The image object for one of the article's pictures, or null.
+     * @returns {{width: number, height: number, dictionary: string, stream: string}|null}
+     */
+    function pictureObject(image) {
+        const version = PICTURE_VERSIONS.map(name => image && image[name]).find(v => v && v.base64);
+        if (!version) return null;
+        const bytes = atob(version.base64);
+        if (version.type === 'image/jpeg') {
+            const info = jpegInfo(bytes);
+            const space = info && { 1: '/DeviceGray', 3: '/DeviceRGB' }[info.components];
+            if (!space) return null;
+            return {
+                width: info.width,
+                height: info.height,
+                dictionary: `/Type /XObject /Subtype /Image /Width ${info.width} /Height ${info.height} /ColorSpace ${space} /BitsPerComponent 8 /Filter /DCTDecode`,
+                stream: bytes
+            };
+        }
+        if (version.type === 'image/png') {
+            const info = pngInfo(bytes);
+            if (!info) return null;
+            return {
+                width: info.width,
+                height: info.height,
+                dictionary: `/Type /XObject /Subtype /Image /Width ${info.width} /Height ${info.height} /ColorSpace ${info.colors === 1 ? '/DeviceGray' : '/DeviceRGB'} /BitsPerComponent 8 /Filter /FlateDecode /DecodeParms << /Predictor 15 /Colors ${info.colors} /BitsPerComponent 8 /Columns ${info.width} >>`,
+                stream: info.data
+            };
+        }
+        return null;
     }
 
     // --- Layout --------------------------------------------------------------
@@ -471,16 +577,17 @@ const PdfBuilder = (() => {
 
     /**
      * Lay the article out onto A4 pages.
-     * @returns {Array<{ops: string[], links: Array<{rect: number[], uri: string}>}>}
+     * @param {Map<number, {name: string, width: number, height: number}>} [pictures] by index in article.images
+     * @returns {Array<{ops: string[], links: Array<{rect: number[], uri: string}>, pictures: Set<number>}>}
      */
-    function layout(article) {
+    function layout(article, pictures = new Map()) {
         const pages = [];
         let page = null;
         let y = 0;
         const contentWidth = PAGE.width - PAGE.left - PAGE.right;
 
         const newPage = () => {
-            page = { ops: [], links: [] };
+            page = { ops: [], links: [], pictures: new Set() };
             pages.push(page);
             y = PAGE.height - PAGE.top;
         };
@@ -556,6 +663,27 @@ const PdfBuilder = (() => {
                     page.ops.push(`0.7 G 0.5 w ${fixed(PAGE.left + indent)} ${fixed(y)} m ${fixed(PAGE.width - PAGE.right)} ${fixed(y)} l S`);
                     y -= 10;
                     break;
+                case 'image': {
+                    const picture = pictures.get(block.index);
+                    if (!picture) break;
+                    // Pixels at 96 per inch, so a small picture is not blown
+                    // up; a large one fills the column, and a tall one the page.
+                    const room = contentWidth - indent;
+                    const pageHeight = PAGE.height - PAGE.top - PAGE.bottom;
+                    let width = Math.min(room, picture.width * 0.75);
+                    let height = width * picture.height / picture.width;
+                    if (height > pageHeight) {
+                        width *= pageHeight / height;
+                        height = pageHeight;
+                    }
+                    y -= 4;
+                    ensure(height);
+                    const x = PAGE.left + indent + (room - width) / 2;
+                    page.ops.push(`q ${fixed(width)} 0 0 ${fixed(height)} ${fixed(x)} ${fixed(y - height)} cm /${picture.name} Do Q`);
+                    page.pictures.add(block.index);
+                    y -= height + 10;
+                    break;
+                }
                 default:
                     paragraph(block.runs, STYLES.para, indent, { quote: block.quote });
             }
@@ -616,7 +744,17 @@ const PdfBuilder = (() => {
      * @returns {Uint8Array}
      */
     function build(article, now = new Date()) {
-        const pages = layout(article || {});
+        // A picture PDF cannot read is left out, like one the EPUB cannot hold.
+        const pictures = new Map();
+        ((article && article.images) || []).forEach((image, index) => {
+            try {
+                const picture = pictureObject(image);
+                if (picture) pictures.set(index, { ...picture, name: `Im${index}` });
+            } catch (error) {
+                // Not base64 after all: no picture, and the text still goes out.
+            }
+        });
+        const pages = layout(article || {}, pictures);
         const objects = [];
         const add = (content) => {
             objects.push(content);
@@ -632,13 +770,25 @@ const PdfBuilder = (() => {
         }
         const fontResources = Object.entries(FONTS).map(([key, font]) => `/${font.resource} ${fontIds[key]} 0 R`).join(' ');
 
+        // One object per picture actually placed, shared by the pages that show it.
+        const pictureIds = new Map();
+        for (const page of pages) {
+            for (const index of page.pictures) {
+                if (pictureIds.has(index)) continue;
+                const picture = pictures.get(index);
+                pictureIds.set(index, add(`<< ${picture.dictionary} /Length ${picture.stream.length} >>\nstream\n${picture.stream}\nendstream`));
+            }
+        }
+
         const pageIds = pages.map(page => {
+            const shown = [...page.pictures].map(index => `/${pictures.get(index).name} ${pictureIds.get(index)} 0 R`);
+            const pictureResources = shown.length ? ` /XObject << ${shown.join(' ')} >>` : '';
             const stream = page.ops.join('\n');
             const contentId = add(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
             const annotIds = page.links.map(link => add(
                 `<< /Type /Annot /Subtype /Link /Rect [${link.rect.map(fixed).join(' ')}] /Border [0 0 0] /A << /S /URI /URI (${asciiUri(link.uri)}) >> >>`));
             const annots = annotIds.length ? ` /Annots [${annotIds.map(id => `${id} 0 R`).join(' ')}]` : '';
-            return add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${PAGE.width} ${PAGE.height}] /Resources << /Font << ${fontResources} >> >> /Contents ${contentId} 0 R${annots} >>`);
+            return add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${PAGE.width} ${PAGE.height}] /Resources << /Font << ${fontResources} >>${pictureResources} >> /Contents ${contentId} 0 R${annots} >>`);
         });
 
         objects[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;

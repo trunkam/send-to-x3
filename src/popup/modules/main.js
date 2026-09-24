@@ -129,6 +129,7 @@ class PopupController {
             const article = await this.articleManager.checkArticle();
             if (article) {
                 this.ui.showArticleFound(article);
+                this.reportImages();
             } else {
                 // Determine if it was an error or just not found?
                 // ArticleManager returns null on "not found" (e.g. too short).
@@ -139,6 +140,33 @@ class PopupController {
             // If error is "No active tab", show error?
             this.ui.showArticleError(error.message);
         }
+    }
+
+    /* Says how the pictures went once they are ready, including when there
+       were none: a picture that silently stayed out looks exactly like an
+       article that never had one. */
+    async reportImages() {
+        this.ui.setArticleImages('Preparing pictures…');
+        await this.articleManager.readyArticle();
+        const report = this.articleManager.imageReport;
+        if (!report) {
+            this.ui.setArticleImages('');
+            return;
+        }
+        if (report.error) {
+            this.ui.setArticleImages(`Pictures could not be prepared: ${report.error}`);
+            return;
+        }
+        const parts = [];
+        if (report.added) {
+            parts.push(`${report.added} picture${report.added === 1 ? '' : 's'} added, for the X3 and the Kindle.`);
+        } else if (!report.failed) {
+            parts.push('No pictures in this article.');
+        }
+        if (report.failed) {
+            parts.push(`${report.failed} picture${report.failed === 1 ? '' : 's'} could not be added.`);
+        }
+        this.ui.setArticleImages(parts.join(' '));
     }
 
     async checkDevice(force = false) {
@@ -338,7 +366,7 @@ class PopupController {
     async handleQueueArticle() {
         if (!this.articleManager.articleData) return;
         try {
-            const item = await addArticle(this.articleManager.articleData);
+            const item = await addArticle(await this.articleManager.readyArticle());
             await this.refreshQueue();
             this.ui.setQueueProgress('Article added to the local queue.');
             // The X3 may be days away; the Kindle does not have to wait for it.
@@ -361,10 +389,16 @@ class PopupController {
         if (HtmlArticle.isHtmlFilename(file.name)) {
             // Raw HTML from the iPad Shortcut: queue it as an article, so it
             // gets the same EPUB, filename and date folder as an extracted page.
-            const article = HtmlArticle.parse(await file.text(), {
+            const parsed = HtmlArticle.parse(await file.text(), {
                 filename: file.name,
                 date: TransferUtils.dateFolder(new Date(file.lastModified || Date.now()))
             });
+            // The Shortcut's HTML points at its pictures on the internet: they
+            // are fetched now, while there is a connection, and travel with
+            // the article from here on.
+            const { article } = globalThis.ArticleImages
+                ? await ArticleImages.prepare(parsed).catch(() => ({ article: parsed }))
+                : { article: parsed };
             await this.copyQueueItem(await addArticle(article));
         } else {
             const [item] = await addFiles([file]);
@@ -560,6 +594,8 @@ class PopupController {
                 setting: 'kindleFolder',
                 mark: 'kindleCopied',
                 build: 'X4_BUILD_EPUB',
+                // KOReader shows a picture at its pixel size: the Kindle needs wider ones.
+                variant: 'kindle',
                 one: 'Kindle copy',
                 many: 'Kindle copies',
                 working: 'Copying for the Kindle…',
@@ -601,7 +637,7 @@ class PopupController {
         try {
             let entry;
             if (source.article) {
-                const response = await browserAPI.runtime.sendMessage({ type: target.build, payload: source.article });
+                const response = await browserAPI.runtime.sendMessage({ type: target.build, payload: source.article, variant: target.variant });
                 if (!response || !response.success) throw new Error((response && response.error) || `${target.one} generation failed`);
                 entry = { filename: response.filename, base64: response.base64 };
             } else {
@@ -860,7 +896,7 @@ class PopupController {
     }
 
     async handleSend() {
-        const article = this.articleManager.articleData;
+        const article = await this.articleManager.readyArticle();
         if (!article || !this.deviceConnected) return;
 
         const uiSettings = this.ui.getSettingsFromUI();
@@ -990,7 +1026,7 @@ class PopupController {
        it. The downloads API is Chrome's, and Firefox desktop's when it accepts
        the file. The link is what remains, and what the phone has. */
     async handleDownload() {
-        const article = this.articleManager.articleData;
+        const article = await this.articleManager.readyArticle();
         if (!article) return;
 
         this.ui.setDownloadButtonState('downloading');

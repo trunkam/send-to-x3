@@ -44,10 +44,11 @@ function truncateUtf8(text, maxBytes) {
 const EpubBuilder = {
     /**
      * Generate EPUB blob from article data
-     * @param {Object} article - { title, author, date, body, url }
+     * @param {Object} article - { title, author, date, body, url, images }
+     * @param {{variant?: 'x3'|'kindle'}} [options] which reader's pictures go in
      * @returns {Promise<Blob>} - EPUB blob
      */
-    async build(article) {
+    async build(article, { variant = 'x3' } = {}) {
         // JSZip is available globally from jszip.min.js loaded by service worker
         if (typeof JSZip === 'undefined') {
             throw new Error('JSZip not loaded');
@@ -75,12 +76,14 @@ const EpubBuilder = {
         }
         */
 
+        const pictures = this.pictureFiles(article, variant);
         const metadata = {
             title: article.title,
             author: article.author,
             date: article.date,
             uuid: uuid,
-            coverMediaType
+            coverMediaType,
+            images: pictures
         };
 
         // Add mimetype file (must be first and uncompressed)
@@ -96,7 +99,10 @@ const EpubBuilder = {
         zip.file('OEBPS/toc.ncx', EpubTemplates.tocNcx(metadata));
 
         // Add content.xhtml (pass full article including url)
-        zip.file('OEBPS/content.xhtml', EpubTemplates.contentXhtml(article));
+        zip.file('OEBPS/content.xhtml', EpubTemplates.contentXhtml({ ...article, body: this.resolvePictures(article.body, pictures) }));
+        for (const picture of pictures) {
+            zip.file(`OEBPS/${picture.href}`, picture.base64, { base64: true });
+        }
 
         // Generate the EPUB as a Blob
         const epubBlob = await zip.generateAsync({
@@ -167,6 +173,35 @@ const EpubBuilder = {
         );
         const basename = truncateUtf8(safeBasename, MAX_EPUB_BASENAME_BYTES);
         return `${basename}.epub`;
+    },
+
+    /**
+     * The picture files of one reader's version, from the article's images
+     * (see ArticleImages). An image with no version for this reader is left
+     * out, and resolvePictures then drops it from the body.
+     * @returns {Array<{index: number, id: string, href: string, mediaType: string, base64: string}>}
+     */
+    pictureFiles(article, variant) {
+        return (article.images || []).map((image, index) => {
+            const version = image && image[variant];
+            if (!version || !version.base64) return null;
+            const extension = version.type === 'image/png' ? 'png' : 'jpg';
+            return { index, id: `img${index}`, href: `images/img-${index}.${extension}`, mediaType: version.type, base64: version.base64 };
+        }).filter(Boolean);
+    },
+
+    /**
+     * Points each <img src="x3img:N"> at its file, and takes out every other
+     * picture: an address on the internet is something neither reader fetches.
+     */
+    resolvePictures(body, pictures) {
+        const byIndex = new Map(pictures.map(picture => [picture.index, picture]));
+        return String(body || '').replace(/<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi, (tag) => {
+            const match = /\ssrc\s*=\s*["']?x3img:(\d+)/i.exec(tag);
+            const picture = match && byIndex.get(Number(match[1]));
+            if (!picture) return '';
+            return tag.replace(/(\ssrc\s*=\s*["']?)x3img:\d+/i, `$1${picture.href}`);
+        });
     },
 
     /**

@@ -50,7 +50,7 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.type === 'X4_BUILD_EPUB') {
-        handleBuildEpub(message.payload)
+        handleBuildEpub(message.payload, message.variant)
             .then(result => sendResponse(result))
             .catch(error => sendResponse({
                 success: false,
@@ -403,8 +403,9 @@ function bytesToBase64(arrayBuffer) {
  * folder handle, an API that does not exist in a service worker, but only this
  * side has JSZip and the builder, so the bytes travel back as base64.
  */
-async function handleBuildEpub(article) {
-    const epubBlob = await EpubBuilder.build(article);
+async function handleBuildEpub(article, variant = 'x3') {
+    // The Kindle's copy asks for its own, larger pictures.
+    const epubBlob = await EpubBuilder.build(article, { variant });
 
     if (!epubBlob || !(epubBlob instanceof Blob)) {
         throw new Error('EPUB generation failed');

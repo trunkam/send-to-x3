@@ -45,6 +45,7 @@
           </button>
         </div>
         <div id="article-status" class="hint hidden"></div>
+        <div id="article-images" class="hint hidden"></div>
       </div>
 
       <div id="article-not-found" class="no-article hidden">
@@ -185,7 +186,7 @@
 
           <label class="input-label" for="dropbox-pdf-folder">PDF folder on Dropbox</label>
           <input type="text" id="dropbox-pdf-folder" class="settings-input" placeholder="e.g. /Articoli PDF — empty is off">
-          <p class="hint">Every article you send, queue or import is also saved here as a PDF, to keep or to share with someone who has no e-reader. Text only, like the EPUB. Files you add as they are (EPUBs, X3 formats) get no PDF. Without internet the PDF waits like the Kindle copy.</p>
+          <p class="hint">Every article you send, queue or import is also saved here as a PDF, to keep or to share with someone who has no e-reader, pictures and charts included (in grays). Files you add as they are (EPUBs, X3 formats) get no PDF. Without internet the PDF waits like the Kindle copy.</p>
           <p id="dropbox-status" class="hint">Not connected.</p>
           <div class="button-group">
             <button id="dropbox-connect-btn" class="send-btn secondary"><span class="btn-icon">🔗</span><span class="btn-text">Connect</span></button>
@@ -214,6 +215,7 @@
   <script src="../utils/html_article.js"></script>
   <script src="../utils/dropbox_client.js"></script>
   <script src="../utils/kindle_outbox.js"></script>
+  <script src="../utils/article_images.js"></script>
   <script src="../utils/save_folder.js"></script>
   <script src="../utils/blob_download.js"></script>
   <script src="../utils/article_cleanup.js"></script>

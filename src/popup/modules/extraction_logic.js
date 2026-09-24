@@ -3,7 +3,7 @@
  * This function is stringified and injected into the page, so it must be self-contained.
  */
 // Note: This function is stringified, so no imports allowed!
-export function extractArticle() {
+export async function extractArticle() {
     try {
         console.log('[X4] Extracting article...');
         const hostname = window.location.hostname;
@@ -148,6 +148,117 @@ export function extractArticle() {
         const hasReadability = typeof Readability !== 'undefined';
         console.log('[X4] Readability available:', hasReadability);
 
+        // --- CHARTS ---
+        // A chart drawn as SVG - Highcharts on the WSJ - is a picture only on
+        // screen: the X3 reads no SVG, and the chart's colours live in the
+        // site's stylesheet, not in the drawing. So it is turned into a PNG
+        // here, the one place where those styles can still be read, and its
+        // place in the page is marked for whichever road the article takes
+        // below. The marks come off again in the finally at the bottom.
+        const charts = [];
+        let chartsFailed = 0;
+        try {
+            const STYLE_PROPERTIES = ['fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-opacity',
+                'stroke-dasharray', 'stroke-linecap', 'opacity', 'font-family', 'font-size', 'font-weight',
+                'font-style', 'text-anchor', 'dominant-baseline', 'visibility', 'display'];
+            const layers = [...document.querySelectorAll('svg')].filter((svg) => {
+                if (svg.parentElement && svg.parentElement.closest('svg')) return false;
+                if (svg.closest('nav, header, footer, aside, button, a')) return false;
+                const box = svg.getBoundingClientRect();
+                return box.width >= 300 && box.height >= 150;
+            });
+
+            // Highcharts draws one chart on two stacked SVGs, titles on one and
+            // bars on the other: layers that mostly cover each other are one chart.
+            const groups = [];
+            for (const svg of layers) {
+                const box = svg.getBoundingClientRect();
+                const group = groups.find((candidate) => {
+                    const w = Math.min(candidate.right, box.right) - Math.max(candidate.left, box.left);
+                    const h = Math.min(candidate.bottom, box.bottom) - Math.max(candidate.top, box.top);
+                    const smaller = Math.min(box.width * box.height, (candidate.right - candidate.left) * (candidate.bottom - candidate.top));
+                    return w > 0 && h > 0 && w * h >= smaller * 0.5;
+                });
+                if (group) {
+                    group.svgs.push(svg);
+                    group.left = Math.min(group.left, box.left);
+                    group.top = Math.min(group.top, box.top);
+                    group.right = Math.max(group.right, box.right);
+                    group.bottom = Math.max(group.bottom, box.bottom);
+                } else {
+                    groups.push({ svgs: [svg], left: box.left, top: box.top, right: box.right, bottom: box.bottom });
+                }
+            }
+
+            // The drawing with its computed styles written into it, so it looks
+            // the same once taken away from the page's stylesheet.
+            const standalone = (svg, box) => {
+                const copy = svg.cloneNode(true);
+                const originals = [svg, ...svg.querySelectorAll('*')];
+                const copies = [copy, ...copy.querySelectorAll('*')];
+                originals.forEach((element, i) => {
+                    const computed = getComputedStyle(element);
+                    copies[i].setAttribute('style', STYLE_PROPERTIES.map(p => `${p}:${computed.getPropertyValue(p)}`).join(';'));
+                });
+                copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                copy.setAttribute('width', box.width);
+                copy.setAttribute('height', box.height);
+                return new XMLSerializer().serializeToString(copy);
+            };
+
+            const ancestors = (element) => {
+                const list = [];
+                for (let e = element; e; e = e.parentElement) list.push(e);
+                return list;
+            };
+
+            for (const group of groups.slice(0, 15)) {
+                try {
+                    const width = group.right - group.left;
+                    const height = group.bottom - group.top;
+                    // Wide enough for the Kindle's version; the X3's is cut from it.
+                    const scale = Math.min(1000 / width, 3);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.round(width * scale);
+                    canvas.height = Math.round(height * scale);
+                    const context = canvas.getContext('2d');
+                    context.fillStyle = '#fff';
+                    context.fillRect(0, 0, canvas.width, canvas.height);
+                    for (const svg of group.svgs) {
+                        const box = svg.getBoundingClientRect();
+                        const layer = new Image();
+                        layer.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(standalone(svg, box));
+                        await layer.decode();
+                        context.drawImage(layer, (box.left - group.left) * scale, (box.top - group.top) * scale,
+                            box.width * scale, box.height * scale);
+                    }
+                    const dataUrl = canvas.toDataURL('image/png');
+
+                    // The chart's place: the element holding all its layers,
+                    // unless that element holds the article's prose too.
+                    let holder = group.svgs[0];
+                    for (const svg of group.svgs.slice(1)) {
+                        const theirs = ancestors(svg);
+                        holder = ancestors(holder).find(a => theirs.includes(a)) || holder;
+                    }
+                    if (holder.querySelectorAll('p').length > 2) holder = group.svgs[0];
+
+                    // The title can sit on any layer, under Highcharts' name or the
+                    // site's own (the WSJ's is "charts-headline").
+                    const titled = group.svgs.map(svg => svg.querySelector('.highcharts-title, [class*="headline"], title'))
+                        .find(title => title && title.textContent.trim());
+                    const alt = (titled?.textContent || group.svgs[0].getAttribute('aria-label') || 'Chart').trim();
+                    holder.setAttribute('data-x3-chart', String(charts.length));
+                    charts.push({ dataUrl, alt });
+                } catch (error) {
+                    chartsFailed++;
+                    console.warn('[X4] Chart not captured:', error.message);
+                }
+            }
+        } catch (error) {
+            console.warn('[X4] Chart search failed:', error.message);
+        }
+
         // A newsletter opened in the browser is an HTML email: it can have an
         // empty <title> and no og:title, with the title written only in the page's
         // own <h1>. Readability already falls back to that heading, but the
@@ -203,6 +314,17 @@ export function extractArticle() {
         if (hasReadability) {
             // Use Readability
             const docClone = document.cloneNode(true);
+            // Each captured chart becomes a picture Readability can keep, in a
+            // <figure> so it is not mistaken for an empty box.
+            for (const holder of docClone.querySelectorAll('[data-x3-chart]')) {
+                const index = holder.getAttribute('data-x3-chart');
+                const figure = docClone.createElement('figure');
+                const picture = docClone.createElement('img');
+                picture.setAttribute('src', `x3-chart:${index}`);
+                picture.setAttribute('alt', charts[Number(index)]?.alt || '');
+                figure.appendChild(picture);
+                holder.replaceWith(figure);
+            }
             const reader = new Readability(docClone);
             const article = reader.parse();
             readabilityLength = article?.textContent?.length ?? 0;
@@ -244,6 +366,8 @@ export function extractArticle() {
                         extraction: 'readability',
                         readabilityLength,
                         body,
+                        charts,
+                        chartsFailed,
                         rawText: textContent,
                         sourceUrl: window.location.href
                     }
@@ -276,7 +400,43 @@ export function extractArticle() {
                 .el;
         }
 
-        textContent = mainContent.innerText || mainContent.textContent || '';
+        // The fallback reads the page as text, where a picture leaves nothing
+        // behind - and a chart leaves its axis labels, as a paragraph of
+        // numbers. So for the time of the reading each picture is hidden and a
+        // paragraph holding only a marker stands in its place; the popup turns
+        // the marker back into the picture. The page is put back straight after.
+        const imageSources = [];
+        const undo = [];
+        const standIn = (element, src, alt) => {
+            const marker = document.createElement('p');
+            marker.textContent = `[[x3-image:${imageSources.length}]]`;
+            imageSources.push({ src, alt });
+            element.parentNode.insertBefore(marker, element);
+            const display = element.style.display;
+            element.style.display = 'none';
+            undo.push(() => {
+                marker.remove();
+                element.style.display = display;
+            });
+        };
+        try {
+            for (const holder of mainContent.querySelectorAll('[data-x3-chart]')) {
+                const index = Number(holder.getAttribute('data-x3-chart'));
+                standIn(holder, `x3-chart:${index}`, charts[index]?.alt || '');
+            }
+            for (const picture of mainContent.querySelectorAll('img')) {
+                if (imageSources.length >= 30) break;
+                if (picture.closest('[data-x3-chart], nav, header, footer, aside')) continue;
+                const src = picture.currentSrc || picture.src;
+                // Icons, avatars, tracking pixels and pictures not yet loaded.
+                if (!src || picture.getBoundingClientRect().width < 200 ||
+                    picture.naturalWidth < 200 || picture.naturalHeight < 100) continue;
+                standIn(picture, src, picture.alt || '');
+            }
+            textContent = mainContent.innerText || mainContent.textContent || '';
+        } finally {
+            undo.reverse().forEach(step => step());
+        }
         wordCount = textContent.split(/\s+/).length;
 
         console.log('[X4] Fallback container:', mainContent.tagName, textContent.length, 'chars');
@@ -328,6 +488,9 @@ export function extractArticle() {
                 extraction: 'fallback',
                 readabilityLength,
                 bodyParagraphs: paragraphs,
+                charts,
+                chartsFailed,
+                imageSources,
                 rawText: textContent,
                 sourceUrl: window.location.href
             }
@@ -336,5 +499,8 @@ export function extractArticle() {
     } catch (error) {
         console.error('[X4] Extraction error:', error);
         return { success: false, reason: error.message, detail: `Extraction failed: ${error.message}` };
+    } finally {
+        // The chart marks were only for the extraction: the page is left as found.
+        document.querySelectorAll('[data-x3-chart]').forEach(holder => holder.removeAttribute('data-x3-chart'));
     }
 }
