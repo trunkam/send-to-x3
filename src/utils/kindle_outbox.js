@@ -8,6 +8,9 @@
    copy is written down here before it is attempted, and whatever did not go
    through is tried again the next time the popup opens.
 
+   The PDFs kept for the archive wait in a list of their own, handled by the
+   same functions: only the folder and the storage key differ.
+
    The bytes are kept, not the article, so the copy does not have to be rebuilt
    from an article that may have left the queue by then. This module holds no storage and no network - both come in
    as arguments - so it stays testable under Node. */
@@ -47,11 +50,12 @@ const KindleOutbox = {
             !sent.some(done => done.filename === entry.filename && done.addedAt === entry.addedAt));
     },
 
-    /* Queue items that still owe the Kindle a copy: queued before the copy was
-       turned on, or before the extension could make copies at all. Each one
-       remembers, so it is copied once and not again at every popup. */
-    owedByQueue(items) {
-        return (items || []).filter(item => !item.kindleCopied);
+    /* Queue items that still owe a copy: queued before the copy was turned
+       on, or before the extension could make copies at all. Each one
+       remembers, per copy, so it is copied once and not again at every popup.
+       `marks` names the copies to look for; the Kindle's alone by default. */
+    owedByQueue(items, marks = ['kindleCopied']) {
+        return (items || []).filter(item => marks.some(mark => !item[mark]));
     },
 
     // What prepareKindleCopy needs from a queue item.

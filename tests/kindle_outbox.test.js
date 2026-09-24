@@ -93,6 +93,15 @@ describe('KindleOutbox and the queue', () => {
         assert.deepEqual(KindleOutbox.owedByQueue(items).map(item => item.id), [1]);
     });
 
+    it('counts an item as owing while any one of its copies is missing', () => {
+        const items = [
+            { id: 1, kindleCopied: true },
+            { id: 2, kindleCopied: true, pdfCopied: true },
+            { id: 3, pdfCopied: true }
+        ];
+        assert.deepEqual(KindleOutbox.owedByQueue(items, ['kindleCopied', 'pdfCopied']).map(item => item.id), [1, 3]);
+    });
+
     it('hands over the article of an article and the file of a file', () => {
         const blob = { size: 3 };
         assert.deepEqual(KindleOutbox.sourceFor({ kind: 'article', article: { title: 'A' } }), { article: { title: 'A' } });

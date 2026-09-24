@@ -15,6 +15,7 @@ if (typeof importScripts === 'function') {
             '../utils/folder_path.js',
             '../epub/epub_templates.js',
             '../epub/epub_builder.js',
+            '../pdf/pdf_builder.js',
             '../upload/x4_upload_tab.js',
             '../upload/crosspoint_upload.js',
             '../utils/settings.js'
@@ -50,6 +51,16 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === 'X4_BUILD_EPUB') {
         handleBuildEpub(message.payload)
+            .then(result => sendResponse(result))
+            .catch(error => sendResponse({
+                success: false,
+                error: error.message
+            }));
+        return true;
+    }
+
+    if (message.type === 'X4_BUILD_PDF') {
+        handleBuildPdf(message.payload)
             .then(result => sendResponse(result))
             .catch(error => sendResponse({
                 success: false,
@@ -405,6 +416,19 @@ async function handleBuildEpub(article) {
         success: true,
         filename: EpubBuilder.generateFilename(article),
         base64: bytesToBase64(arrayBuffer)
+    };
+}
+
+/**
+ * The PDF copy, built here beside the EPUB so it carries the EPUB's name and
+ * the same entity table, and handed back as base64 like the EPUB.
+ */
+async function handleBuildPdf(article) {
+    const bytes = PdfBuilder.build(article);
+    return {
+        success: true,
+        filename: PdfBuilder.filenameFor(EpubBuilder.generateFilename(article)),
+        base64: bytesToBase64(bytes)
     };
 }
 

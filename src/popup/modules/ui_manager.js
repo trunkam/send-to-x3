@@ -32,6 +32,7 @@ export class UIManager {
             queueItems: document.getElementById('queue-items'),
             queueProgress: document.getElementById('queue-progress'),
             kindleStatus: document.getElementById('kindle-status'),
+            pdfStatus: document.getElementById('pdf-status'),
             organizeByDate: document.getElementById('organize-by-date'),
             deviceLoading: document.getElementById('device-loading'),
             deviceConnected: document.getElementById('device-connected'),
@@ -60,6 +61,7 @@ export class UIManager {
             dropboxAppKeyInput: document.getElementById('dropbox-app-key'),
             dropboxFolderInput: document.getElementById('dropbox-folder'),
             dropboxKindleFolderInput: document.getElementById('dropbox-kindle-folder'),
+            dropboxPdfFolderInput: document.getElementById('dropbox-pdf-folder'),
             dropboxSentLabel: document.getElementById('dropbox-sent-label'),
             dropboxStatus: document.getElementById('dropbox-status'),
             dropboxConnectBtn: document.getElementById('dropbox-connect-btn'),
@@ -132,6 +134,9 @@ export class UIManager {
         if (typeof state.kindleFolder === 'string' && this.elements.dropboxKindleFolderInput) {
             this.elements.dropboxKindleFolderInput.value = state.kindleFolder;
         }
+        if (typeof state.pdfFolder === 'string' && this.elements.dropboxPdfFolderInput) {
+            this.elements.dropboxPdfFolderInput.value = state.pdfFolder;
+        }
     }
 
     // Its own line, not the queue's: the Dropbox check on open writes there,
@@ -140,6 +145,13 @@ export class UIManager {
         if (!this.elements.kindleStatus) return;
         this.elements.kindleStatus.textContent = message;
         this.elements.kindleStatus.classList.toggle('hidden', !message);
+    }
+
+    // Its own line too: the PDF and the Kindle copy succeed or fail apart.
+    setPdfStatus(message = '') {
+        if (!this.elements.pdfStatus) return;
+        this.elements.pdfStatus.textContent = message;
+        this.elements.pdfStatus.classList.toggle('hidden', !message);
     }
 
     setupListeners(handlers) {
@@ -156,6 +168,7 @@ export class UIManager {
         if (handlers.onDropboxFolderChange) this.elements.dropboxFolderInput.addEventListener('change', handlers.onDropboxFolderChange);
         if (handlers.onDropboxAppKeyChange) this.elements.dropboxAppKeyInput.addEventListener('change', handlers.onDropboxAppKeyChange);
         if (handlers.onDropboxKindleFolderChange) this.elements.dropboxKindleFolderInput.addEventListener('change', handlers.onDropboxKindleFolderChange);
+        if (handlers.onDropboxPdfFolderChange) this.elements.dropboxPdfFolderInput.addEventListener('change', handlers.onDropboxPdfFolderChange);
         if (handlers.onSendAll) this.elements.sendAllBtn.addEventListener('click', handlers.onSendAll);
         if (handlers.onStopQueue) this.elements.stopQueueBtn.addEventListener('click', handlers.onStopQueue);
         if (handlers.onOrganizeByDate) this.elements.organizeByDate.addEventListener('change', handlers.onOrganizeByDate);
