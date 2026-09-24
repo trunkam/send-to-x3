@@ -82,8 +82,17 @@ export class ArticleManager {
        an ordinary module with tests - inside the injected function it could be
        neither imported nor tested.
 
-       Readability's own output arrives finished and is left alone. */
+       Readability's own output arrives finished and is left alone.
+
+       On both roads the title comes off the browser tab, which may carry a
+       notification counter and a byline: ArticleTitle takes them off. */
     finishArticle(article) {
+        const finished = this.finishBody(article);
+        if (!globalThis.ArticleTitle) return finished;
+        return { ...finished, title: ArticleTitle.clean(finished.title, finished.author) };
+    }
+
+    finishBody(article) {
         if (article.extraction !== 'fallback' || !Array.isArray(article.bodyParagraphs)) {
             return article;
         }
