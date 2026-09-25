@@ -46,13 +46,91 @@ const HtmlArticle = {
         return value || 'Untitled';
     },
 
+    // A chart the Shortcut turned into a picture in the page
+    // (scripts/ipad_shortcut_charts.js). Its Text step writes these after the
+    // reader's HTML, outside <body>, so they are looked for in the whole file.
+    CHART_PATTERN: /<figure\b[^>]*\bdata-x3-chart\b[^>]*>[\s\S]*?<\/figure>/gi,
+
+    /* Takes the Shortcut's charts out of the file.
+       @returns {{source: string, charts: Array<{picture: string, anchors: string[]}>}} */
+    takeCharts(source) {
+        const charts = [];
+        const rest = String(source || '').replace(this.CHART_PATTERN, (figure) => {
+            const picture = /<img\b[^>]*>/i.exec(figure);
+            if (!picture) return '';
+            const after = /\bdata-x3-after\s*=\s*"([^"]*)"/i.exec(figure);
+            let anchors = [];
+            try {
+                anchors = after ? JSON.parse(decodeURIComponent(after[1])) : [];
+            } catch {
+                anchors = [];
+            }
+            charts.push({
+                picture: picture[0],
+                anchors: (Array.isArray(anchors) ? anchors : []).map(a => this.comparable(a)).filter(Boolean)
+            });
+            return '';
+        });
+        return { source: rest, charts };
+    },
+
+    /* Text as both sides can agree on it: the page gives the Shortcut plain
+       text, the reader's HTML may spell the same with entities or other
+       quotes. */
+    comparable(text) {
+        return String(text || '')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+            .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
+            .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'")
+            .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&amp;/gi, '&')
+            .replace(/[‘’‚‛′]/g, "'").replace(/[“”„‟″]/g, '"')
+            .replace(/[–—]/g, '-')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+    },
+
+    /* Puts each chart after the paragraph that stood above it in the page, the
+       nearest one the reader kept; one whose place cannot be found goes at the
+       end, so a chart is never lost for its place. */
+    placeCharts(body, charts) {
+        if (!charts.length) return body;
+        const paragraphs = [...body.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)].map(match => ({
+            end: match.index + match[0].length,
+            text: this.comparable(this.stripTags(match[1]))
+        }));
+        const inserts = [];
+        const unplaced = [];
+        for (const chart of charts) {
+            const figure = `<figure>${chart.picture}</figure>`;
+            let spot = null;
+            for (const anchor of chart.anchors) {
+                spot = paragraphs.find(p => p.text.startsWith(anchor)) || null;
+                if (spot) break;
+            }
+            if (spot) inserts.push({ at: spot.end, figure });
+            else unplaced.push(figure);
+        }
+        // From the back, so the positions still to use stay right; two charts
+        // after one paragraph keep their order.
+        let placed = body;
+        const ordered = inserts.map((insert, order) => ({ ...insert, order }))
+            .sort((a, b) => b.at - a.at || b.order - a.order);
+        for (const insert of ordered) {
+            placed = placed.slice(0, insert.at) + insert.figure + placed.slice(insert.at);
+        }
+        return unplaced.length ? `${placed}\n${unplaced.join('\n')}` : placed;
+    },
+
     /**
      * @param {string} html - the file as saved by the Shortcut
      * @param {Object} options - { filename, date }
      * @returns {Object} { title, author, date, body, sourceUrl }
      */
     parse(html, options = {}) {
-        let source = this.stripSvg(html);
+        const taken = this.takeCharts(this.stripSvg(html));
+        let source = taken.source;
 
         // The Shortcut writes the title as an <h1> and lands it *before* the
         // doctype, so it has to be looked for in the whole document, not in the
@@ -104,7 +182,7 @@ const HtmlArticle = {
             campaign: NewsletterNames.findMarker(options.filename, html),
             author: '',
             date: options.date || new Date().toISOString().split('T')[0],
-            body: body.trim(),
+            body: this.placeCharts(body.trim(), taken.charts),
             sourceUrl: this.findSourceUrl(source)
         };
     }

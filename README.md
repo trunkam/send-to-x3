@@ -67,13 +67,18 @@ What works, with no server and no account, is a synced folder as a drop box:
   folder.
 - **iPad** — an iOS Shortcut built on *Get article from web page*: it reads the
   rendered article (paywalls included, same reason as above), turns it into
-  HTML, and saves it to that folder.
+  HTML, and saves it to that folder. The reader view drops charts drawn as
+  SVG, so a *Run JavaScript on Web Page* step with
+  [`scripts/ipad_shortcut_charts.js`](scripts/ipad_shortcut_charts.js) turns
+  them into pictures in the open page and appends them to the file.
 - **Phone** — `📂 Add files` reaches the folder through the system file picker
   (Dropbox, Drive and Files all show up as document providers), and everything
   goes to the device with **Send all**.
 
-HTML is converted on the way in: charts (`<svg>`) are dropped, the title is
-taken from the `<h1>`, and the result is packaged as EPUB exactly like an
+HTML is converted on the way in: charts left as `<svg>` are dropped, the
+Shortcut's chart pictures go back after the paragraph that stood above them
+(at the end if that paragraph cannot be found), pictures on the internet are
+fetched, the title is taken from the `<h1>`, and the result is packaged as EPUB exactly like an
 article extracted in the browser — same filename, same date folder.
 
 ---

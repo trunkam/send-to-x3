@@ -243,3 +243,72 @@ describe('HtmlArticle.parse — titleSource', () => {
         }
     });
 });
+
+describe('HtmlArticle.parse — charts from the Shortcut', () => {
+    const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+    const chart = (anchors, alt = 'Chart') =>
+        `<figure data-x3-chart data-x3-after="${encodeURIComponent(JSON.stringify(anchors))}"><img src="${PNG}" alt="${alt}"/></figure>`;
+    // As the Shortcut's Text step writes it: title, reader HTML, then the charts.
+    const file = (charts) => `<h1>Bond funds</h1>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+</head>
+<body>
+<p data-type="paragraph">Yields passed 5.2% this week, and that’s the point.</p><p data-type="paragraph">Mahajan, however, isn’t overly worried.</p>
+</body>
+</html>
+${charts.join('\n')}`;
+
+    it('puts a chart after the paragraph that stood above it in the page', () => {
+        const article = HtmlArticle.parse(file([chart(['Yields passed 5.2% this week'])]), { filename: 'Bond.html' });
+        assert.match(article.body, /the point\.<\/p><figure><img src="data:image\/png;base64,[^"]+" alt="Chart"\/><\/figure><p data-type="paragraph">Mahajan/);
+    });
+
+    it('matches the paragraph whatever quotes the page and the reader use', () => {
+        const article = HtmlArticle.parse(file([chart(["Mahajan, however, isn't overly"])]), { filename: 'Bond.html' });
+        assert.match(article.body, /worried\.<\/p><figure>/);
+    });
+
+    it('tries the paragraphs further up when the nearest was left out by the reader', () => {
+        const article = HtmlArticle.parse(file([chart(['Bond funds are on the skids, a caption', 'Yields passed'])]), { filename: 'Bond.html' });
+        assert.match(article.body, /the point\.<\/p><figure>/);
+    });
+
+    it('keeps a chart whose place cannot be found, at the end', () => {
+        const article = HtmlArticle.parse(file([chart(['Nothing like this in the text'])]), { filename: 'Bond.html' });
+        assert.match(article.body, /worried\.<\/p>\s*<figure><img/);
+    });
+
+    it('keeps two charts after one paragraph in their order', () => {
+        const article = HtmlArticle.parse(file([chart(['Yields passed'], 'First'), chart(['Yields passed'], 'Second')]), { filename: 'Bond.html' });
+        assert.ok(article.body.indexOf('alt="First"') < article.body.indexOf('alt="Second"'));
+        assert.equal((article.body.match(/<figure>/g) || []).length, 2);
+    });
+
+    it('leaves no trace of the markers and keeps the title', () => {
+        const article = HtmlArticle.parse(file([chart(['Yields passed'])]), { filename: 'Bond.html' });
+        assert.ok(!/data-x3/.test(article.body));
+        assert.equal(article.title, 'Bond funds');
+    });
+
+    it('copes with a marker it cannot read', () => {
+        const broken = `<figure data-x3-chart data-x3-after="%E0%A4%A"><img src="${PNG}" alt=""/></figure>`;
+        const article = HtmlArticle.parse(file([broken]), { filename: 'Bond.html' });
+        assert.match(article.body, /<figure><img/);
+    });
+
+    it('ignores what the If block writes when the page was a link', () => {
+        // Shared as a link, the If skips the script and hands the Text step
+        // the input's type instead: it lands after </html>.
+        const article = HtmlArticle.parse(`${file([])}\nURL`, { filename: 'Bond.html' });
+        assert.ok(!/URL/.test(article.body));
+        assert.match(article.body, /worried\.<\/p>$/);
+    });
+
+    it('changes nothing for a file without charts', () => {
+        const article = HtmlArticle.parse(file([]), { filename: 'Bond.html' });
+        assert.ok(!/<figure/.test(article.body));
+    });
+});
