@@ -223,7 +223,9 @@ export class UIManager {
         this.elements.articleTitle.textContent = article.title;
         this.elements.articleAuthor.textContent = article.author;
         this.elements.articleWords.textContent = `${article.wordCount?.toLocaleString() || '—'} words`;
-        const road = globalThis.ExtractionRoad ? ExtractionRoad.describe(article) : '';
+        const road = globalThis.ExtractionRoad
+            ? [ExtractionRoad.describe(article), ExtractionRoad.describeDrawings(article)].filter(Boolean).join('\n')
+            : '';
         this.elements.articleRoad.textContent = road;
         this.elements.articleRoad.classList.toggle('hidden', !road);
         this.setArticleStatus('');

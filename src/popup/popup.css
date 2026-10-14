@@ -153,6 +153,8 @@ body {
     margin: -10px 0 16px;
     font-size: 11px;
     color: #71717a;
+    /* The road on one line, what the page held on the next. */
+    white-space: pre-line;
 }
 
 /* Button Group */

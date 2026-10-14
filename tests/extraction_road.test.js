@@ -34,6 +34,19 @@ describe('ExtractionRoad.describe', () => {
             'Read by the fallback · Readability found 40 characters');
     });
 
+    it('describes what the page held that could be a chart', () => {
+        const article = {
+            drawings: { viewport: 412, visibility: 'visible', svgs: [[340, 120], [24, 24]], canvases: [], highcharts: [[340, 300]], images: 1 },
+            charts: []
+        };
+        assert.equal(ExtractionRoad.describeDrawings(article),
+            'Page 412 px · SVG 340×120, 24×24 · canvas none · Highcharts 340×300 · 1 image · 0 charts taken');
+        assert.equal(ExtractionRoad.describeDrawings({ ...article, drawings: { ...article.drawings, visibility: 'hidden' }, charts: [{}], chartsFailed: 1 }),
+            'Page 412 px (hidden) · SVG 340×120, 24×24 · canvas none · Highcharts 340×300 · 1 image · 1 chart taken · 1 failed');
+        assert.equal(ExtractionRoad.describeDrawings({ drawings: { error: 'boom' } }), 'Page not measured: boom');
+        assert.equal(ExtractionRoad.describeDrawings({}), '');
+    });
+
     it('says nothing for articles that took neither road', () => {
         assert.equal(ExtractionRoad.describe({ title: 'From the iPad' }), '');
         assert.equal(ExtractionRoad.describe(null), '');

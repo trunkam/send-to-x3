@@ -157,6 +157,31 @@ export async function extractArticle() {
         // below. The marks come off again in the finally at the bottom.
         const charts = [];
         let chartsFailed = 0;
+
+        // What the page holds that could be a chart, measured as the capture
+        // below sees it. On the phone a WSJ chart came out "No pictures" while
+        // the same page on the PC gave one: the popup shows this, since the
+        // phone has no console to ask what its page looked like.
+        const drawings = {};
+        try {
+            const size = (element) => {
+                const box = element.getBoundingClientRect();
+                return [Math.round(box.width), Math.round(box.height)];
+            };
+            const largest = (elements, count) => elements.map(size)
+                .sort((a, b) => b[0] * b[1] - a[0] * a[1]).slice(0, count);
+            drawings.viewport = Math.round(window.innerWidth);
+            drawings.visibility = document.visibilityState;
+            drawings.svgs = largest([...document.querySelectorAll('svg')]
+                .filter(svg => !(svg.parentElement && svg.parentElement.closest('svg'))), 3);
+            drawings.canvases = largest([...document.querySelectorAll('canvas')], 2);
+            drawings.highcharts = largest([...document.querySelectorAll('.highcharts-container')], 2);
+            drawings.images = [...document.querySelectorAll('img')]
+                .filter(picture => picture.getBoundingClientRect().width >= 200).length;
+        } catch (error) {
+            drawings.error = error.message;
+        }
+
         try {
             const STYLE_PROPERTIES = ['fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-opacity',
                 'stroke-dasharray', 'stroke-linecap', 'opacity', 'font-family', 'font-size', 'font-weight',
@@ -385,6 +410,7 @@ export async function extractArticle() {
                         extraction: 'readability',
                         readabilityLoaded: true,
                         readabilityLength,
+                        drawings,
                         language,
                         body,
                         charts,
@@ -519,6 +545,7 @@ export async function extractArticle() {
                 readabilityLoaded: hasReadability,
                 readabilityLength,
                 hiddenLength,
+                drawings,
                 language,
                 bodyParagraphs: paragraphs,
                 charts,

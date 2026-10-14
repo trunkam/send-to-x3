@@ -27,6 +27,27 @@ const ExtractionRoad = {
             parts.push(`${count(article.hiddenLength)} marked hidden on the page`);
         }
         return parts.join(' · ');
+    },
+
+    /* What the page held that could be a chart, and how many the capture took:
+       "Page 412 px · SVG 340×120, 24×24 · canvas none · Highcharts 340×300 ·
+       3 images · 0 charts taken". A diagnosis line, for the phone. */
+    describeDrawings(article) {
+        const d = article && article.drawings;
+        if (!d) return '';
+        if (d.error) return `Page not measured: ${d.error}`;
+        const list = (sizes) => (sizes && sizes.length ? sizes.map(([w, h]) => `${w}×${h}`).join(', ') : 'none');
+        const charts = (article.charts || []).length;
+        const parts = [
+            `Page ${d.viewport} px${d.visibility && d.visibility !== 'visible' ? ` (${d.visibility})` : ''}`,
+            `SVG ${list(d.svgs)}`,
+            `canvas ${list(d.canvases)}`,
+            `Highcharts ${list(d.highcharts)}`,
+            `${d.images} image${d.images === 1 ? '' : 's'}`,
+            `${charts} chart${charts === 1 ? '' : 's'} taken`
+        ];
+        if (article.chartsFailed) parts.push(`${article.chartsFailed} failed`);
+        return parts.join(' · ');
     }
 };
 
