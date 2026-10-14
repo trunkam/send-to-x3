@@ -17,6 +17,13 @@
 
    The parsing, sizing and PNG encoding are plain functions tested under Node;
    prepare() needs a canvas and runs in the popup. */
+
+// In the extension the popup loads html_article.js first; the Node tests load
+// this file on its own, so pull it in here as well.
+if (typeof globalThis.HtmlArticle === 'undefined' && typeof require !== 'undefined') {
+    globalThis.HtmlArticle = require('./html_article.js');
+}
+
 const ArticleImages = {
     X3_WIDTH: 480,
     KINDLE_WIDTH: 1000,
@@ -76,6 +83,72 @@ const ArticleImages = {
             cursor = image.index + image.tag.length;
         });
         return result + body.slice(cursor);
+    },
+
+    /* The body with every chart made in the page in it. A chart whose place the
+       extraction lost - Readability keeps the article's body, and a chart
+       opening the piece sits above it - goes back before the paragraph that
+       followed it in the page, or else after the nearest one that preceded it,
+       or else at the end: a chart is never lost for its place.
+       @param {{body: string, charts?: Array<{alt: string, before?: string, after?: string[]}>,
+                imageSources?: Array<{src: string}>}} article */
+    placeMissingCharts(article) {
+        const body = String(article?.body || '');
+        const charts = article?.charts || [];
+        if (!charts.length) return body;
+
+        // Charts already in: named directly (Readability), or through a
+        // fallback marker that stands for them.
+        const used = new Set();
+        for (const image of this.findImages(body)) {
+            const chart = /^x3-chart:(\d+)$/.exec(image.src);
+            const marked = /^x3-image:(\d+)$/.exec(image.src);
+            const source = marked ? (article.imageSources || [])[Number(marked[1])] : null;
+            const viaMarker = source && /^x3-chart:(\d+)$/.exec(source.src);
+            if (chart) used.add(Number(chart[1]));
+            if (viaMarker) used.add(Number(viaMarker[1]));
+        }
+
+        const text = globalThis.HtmlArticle;
+        const paragraphs = [...body.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)].map(match => ({
+            start: match.index,
+            end: match.index + match[0].length,
+            text: text.comparable(text.stripTags(match[1]))
+        }));
+        const find = (anchor) => {
+            const wanted = text.comparable(anchor);
+            return wanted ? paragraphs.find(p => p.text.startsWith(wanted)) : null;
+        };
+
+        const inserts = [];
+        const unplaced = [];
+        charts.forEach((chart, index) => {
+            if (used.has(index)) return;
+            const figure = `<figure><img src="x3-chart:${index}" alt="${this.escapeAttribute(chart.alt)}"/></figure>`;
+            const next = chart.before ? find(chart.before) : null;
+            if (next) {
+                inserts.push({ at: next.start, figure });
+                return;
+            }
+            for (const anchor of chart.after || []) {
+                const previous = find(anchor);
+                if (previous) {
+                    inserts.push({ at: previous.end, figure });
+                    return;
+                }
+            }
+            unplaced.push(figure);
+        });
+
+        // From the back, so the positions still to use stay right; two charts
+        // at one spot keep their order.
+        let placed = body;
+        inserts.map((insert, order) => ({ ...insert, order }))
+            .sort((a, b) => b.at - a.at || b.order - a.order)
+            .forEach(insert => {
+                placed = placed.slice(0, insert.at) + insert.figure + placed.slice(insert.at);
+            });
+        return unplaced.length ? `${placed}\n${unplaced.join('\n')}` : placed;
     },
 
     escapeAttribute(text) {

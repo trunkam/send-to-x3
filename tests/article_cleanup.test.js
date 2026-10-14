@@ -207,3 +207,66 @@ describe('ArticleCleanup.stripChrome - Italian pages', () => {
         assert.equal(result[0], prose('uno'));
     });
 });
+
+describe('ArticleCleanup.stripMarkup', () => {
+    const prose = (n) => `<p>${'Paragrafo di prosa vera dell’articolo, abbastanza lungo da pesare. '.repeat(3)}${n}</p>`;
+    const article = Array.from({ length: 8 }, (_, i) => prose(i)).join('');
+
+    it('takes off a player, its fallback text and the line presenting it', () => {
+        const body = '<div><p><em>Ascolta questo episodio grazie a <a href="x">ElevenLabs</a></em></p>' +
+            '<p><audio src="a.mp3">La riproduzione audio non è supportata dal tuo browser.</audio></p>' +
+            `<h5>La storia della settimana</h5>${article}</div>`;
+        const { body: cleaned, dropped } = ArticleCleanup.stripMarkup(body);
+        assert.equal(/audio|Ascolta|non è supportata/.test(cleaned), false);
+        assert.ok(cleaned.startsWith('<div><h5>La storia della settimana</h5>'));
+        assert.deepEqual(dropped.map(d => d.rule), ['player', 'player']);
+    });
+
+    it('keeps a line before a player that does not present it', () => {
+        const body = `${prose('a')}<video src="v.mp4"></video>${article}`;
+        const { body: cleaned } = ArticleCleanup.stripMarkup(body);
+        assert.ok(cleaned.startsWith(prose('a')));
+        assert.equal(cleaned.includes('video'), false);
+    });
+
+    it('drops a sponsor section up to the next heading of its rank', () => {
+        const body = `${article}<h5>Questo episodio è supportato da Wave</h5><p>Acquista il tuo pass</p>` +
+            '<ul><li><p>Startup: per founder</p></li></ul><h6>Prezzi</h6><p>€100</p>' +
+            '<h5>Il toolkit di Technicismi</h5><p>Le cose più interessanti della settimana.</p>';
+        const { body: cleaned } = ArticleCleanup.stripMarkup(body);
+        assert.equal(/Wave|pass|Startup|Prezzi|€100/.test(cleaned), false);
+        assert.ok(cleaned.endsWith('<h5>Il toolkit di Technicismi</h5><p>Le cose più interessanti della settimana.</p>'));
+    });
+
+    it('cuts the tail from the copyright line, biographies included', () => {
+        const body = `<div>${article}<p>Photo credit: Angela Weiss/AFP/Getty Images</p>` +
+            '<p>Copyright ©2026 Dow Jones &amp; Company, Inc. All Rights Reserved.</p>' +
+            '<p>Konrad Putzier is an economics reporter at The Wall Street Journal.</p></div>';
+        const { body: cleaned, dropped } = ArticleCleanup.stripMarkup(body);
+        assert.equal(cleaned, `<div>${article}</div>`);
+        assert.deepEqual(dropped.map(d => d.rule), ['chrome', 'tail', 'tail']);
+    });
+
+    it('does not cut at a marker met before most of the text', () => {
+        const body = `<p>Info</p><p>Condividi</p>${prose('x')}<p>Copyright © 2026 early mention</p>${article}`;
+        const { body: cleaned } = ArticleCleanup.stripMarkup(body);
+        assert.ok(cleaned.includes('early mention'));
+        assert.ok(cleaned.endsWith(prose(7)));
+        assert.equal(/<p>Info<\/p>|<p>Condividi<\/p>/.test(cleaned), false);
+    });
+
+    it('never leaves a tag open, and leaves alone an element it cannot remove whole', () => {
+        const nested = '<blockquote><blockquote><p>Info</p></blockquote></blockquote>';
+        const body = `<div><section>${article}</section>${nested}<p>Lascia un commento</p></div>`;
+        const { body: cleaned } = ArticleCleanup.stripMarkup(body);
+        const count = (re) => (cleaned.match(re) || []).length;
+        assert.equal(count(/<blockquote\b/g), count(/<\/blockquote>/g));
+        assert.equal(count(/<div\b/g), count(/<\/div>/g));
+        assert.equal(count(/<p\b/g), count(/<\/p>/g));
+        assert.equal(cleaned.includes('Lascia un commento'), false);
+    });
+
+    it('changes nothing in an article with none of the furniture', () => {
+        assert.deepEqual(ArticleCleanup.stripMarkup(article), { body: article, dropped: [] });
+    });
+});

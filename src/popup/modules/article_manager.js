@@ -90,17 +90,29 @@ export class ArticleManager {
        an ordinary module with tests - inside the injected function it could be
        neither imported nor tested.
 
-       Readability's own output arrives finished and is left alone.
+       Readability's output arrives as HTML, mostly clean: what it keeps of the
+       furniture - players, the newsletter's closing, copyright and biographies,
+       a sponsor's section - ArticleCleanup.stripMarkup takes off.
 
-       On both roads the title comes off the browser tab, which may carry a
-       notification counter and a byline: ArticleTitle takes them off. */
+       On both roads, after the cleanup, a chart the road dropped is put back where it stood
+       (ArticleImages.placeMissingCharts), and the title comes off the browser
+       tab, which may carry a notification counter and a byline: ArticleTitle
+       takes them off. */
     finishArticle(article) {
-        const finished = this.finishBody(article);
+        let finished = this.finishBody(article);
+        if (globalThis.ArticleImages && finished.charts?.length) {
+            finished = { ...finished, body: ArticleImages.placeMissingCharts(finished) };
+        }
         if (!globalThis.ArticleTitle) return finished;
         return { ...finished, title: ArticleTitle.clean(finished.title, finished.author) };
     }
 
     finishBody(article) {
+        if (article.extraction === 'readability' && globalThis.ArticleCleanup) {
+            const { body, dropped } = ArticleCleanup.stripMarkup(article.body);
+            console.log('[Article Manager] Readability cleanup dropped', dropped.length, 'blocks');
+            return { ...article, body, droppedParagraphs: dropped.length };
+        }
         if (article.extraction !== 'fallback' || !Array.isArray(article.bodyParagraphs)) {
             return article;
         }

@@ -163,3 +163,61 @@ describe('ArticleImages.prepare', () => {
         assert.equal('imageSources' in prepared, false);
     });
 });
+
+describe('ArticleImages.placeMissingCharts', () => {
+    // The WSJ of 14/10: the chart opens the piece, above the body Readability keeps.
+    const LEAD = 'Inflation picked up in September, a sign that high energy prices are tightening their squeeze on consumers';
+    const body = `<div><p>${LEAD} ahead of next month’s midterm elections.</p><h3>The numbers:</h3><p>Consumer prices were up 3.7% in September from a year earlier, the Labor Department said.</p></div>`;
+
+    it('puts a chart Readability dropped before the paragraph that followed it in the page', () => {
+        const placed = ArticleImages.placeMissingCharts({
+            body,
+            charts: [{ alt: 'Consumer-price index', before: LEAD.slice(0, 80), after: [] }]
+        });
+        assert.ok(placed.startsWith('<div><figure><img src="x3-chart:0" alt="Consumer-price index"/></figure><p>Inflation'));
+    });
+
+    it('matches the paragraph whatever quotes and entities either side spells it with', () => {
+        const placed = ArticleImages.placeMissingCharts({
+            body: '<p>It&#8217;s the &quot;core&quot; rate that matters to the Fed here, said the economists.</p>',
+            charts: [{ alt: '', before: 'It’s the “core” rate that matters' }]
+        });
+        assert.ok(placed.startsWith('<figure><img src="x3-chart:0" alt=""/></figure><p>'));
+    });
+
+    it('falls back to after the nearest paragraph above it, then to the end', () => {
+        const placed = ArticleImages.placeMissingCharts({
+            body,
+            charts: [
+                { alt: 'a', before: 'Not in the article any more', after: ['Gone too', 'Consumer prices were up 3.7%'] },
+                { alt: 'b', before: '', after: [] }
+            ]
+        });
+        assert.ok(placed.includes('a year earlier, the Labor Department said.</p><figure><img src="x3-chart:0" alt="a"/></figure>'));
+        assert.ok(placed.endsWith('\n<figure><img src="x3-chart:1" alt="b"/></figure>'));
+    });
+
+    it('leaves alone a chart already in place, on either road', () => {
+        const readability = `<p>x</p><figure><img src="x3-chart:0" alt=""/></figure>`;
+        assert.equal(ArticleImages.placeMissingCharts({ body: readability, charts: [{ alt: '', before: 'x' }] }), readability);
+        const fallback = '<div class="x3-image"><img src="x3-image:2" alt=""/></div>';
+        assert.equal(ArticleImages.placeMissingCharts({
+            body: fallback,
+            charts: [{ alt: '', before: '' }],
+            imageSources: [{ src: 'https://a/1.jpg' }, { src: 'https://a/2.jpg' }, { src: 'x3-chart:0' }]
+        }), fallback);
+    });
+
+    it('keeps two charts that open the piece in their order', () => {
+        const placed = ArticleImages.placeMissingCharts({
+            body,
+            charts: [{ alt: 'first', before: LEAD }, { alt: 'second', before: LEAD }]
+        });
+        assert.ok(placed.indexOf('alt="first"') < placed.indexOf('alt="second"'));
+        assert.ok(placed.indexOf('alt="second"') < placed.indexOf('<p>Inflation'));
+    });
+
+    it('changes nothing when the page made no charts', () => {
+        assert.equal(ArticleImages.placeMissingCharts({ body }), body);
+    });
+});

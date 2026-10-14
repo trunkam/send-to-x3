@@ -212,6 +212,22 @@ export async function extractArticle() {
                 return list;
             };
 
+            // The prose around each chart, so the popup can put the chart back
+            // when the road below drops its place: Readability keeps the
+            // article's body, and a chart opening the piece sits above it.
+            const textOf = (element) => (element.textContent || '').replace(/\s+/g, ' ').trim();
+            const prose = [...document.querySelectorAll('p')].filter(p => textOf(p).length >= 40);
+            const surroundings = (holder) => {
+                const next = prose.find(p => !holder.contains(p) &&
+                    (holder.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_FOLLOWING));
+                const previous = prose.filter(p => !holder.contains(p) &&
+                    (holder.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_PRECEDING));
+                return {
+                    before: next ? textOf(next).slice(0, 80) : '',
+                    after: previous.slice(-3).reverse().map(p => textOf(p).slice(0, 80))
+                };
+            };
+
             for (const group of groups.slice(0, 15)) {
                 try {
                     const width = group.right - group.left;
@@ -249,7 +265,7 @@ export async function extractArticle() {
                         .find(title => title && title.textContent.trim());
                     const alt = (titled?.textContent || group.svgs[0].getAttribute('aria-label') || 'Chart').trim();
                     holder.setAttribute('data-x3-chart', String(charts.length));
-                    charts.push({ dataUrl, alt });
+                    charts.push({ dataUrl, alt, ...surroundings(holder) });
                 } catch (error) {
                     chartsFailed++;
                     console.warn('[X4] Chart not captured:', error.message);

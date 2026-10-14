@@ -6,8 +6,10 @@
    author biographies. In a WSJ article measured on 22/09/2026, 45% of the
    characters in the finished EPUB were not the article.
 
-   This runs on the fallback only. Readability already removes this material,
-   and on the paths where it succeeds there is nothing here to fix. */
+   stripChrome() runs on the fallback's paragraphs. Readability removes most of
+   this material by itself, but not all: what it keeps - the end of a newsletter,
+   the copyright and the biographies under a WSJ piece, a sponsor's section, an
+   audio player - stripMarkup() takes off its HTML, with the same lists. */
 
 const ArticleCleanup = {
     // Past one of these the page has stopped being the article: what follows is
@@ -53,6 +55,8 @@ const ArticleCleanup = {
         /^continue reading$/i,
         /^comments?( \(\d+\))?$/i,
         /^skip to \S+/i,
+        // The credit of a picture that stayed on the page.
+        /^(photo|image) credits?:/i,
         // The same furniture in Italian.
         /^pubblicit[àa]$/i,
         /^annuncio( pubblicitario)?$/i,
@@ -142,6 +146,115 @@ const ArticleCleanup = {
             }
             return `<p>${asXmlText(text)}</p>`;
         }).join('\n');
+    },
+
+    // A heading opening a section that is someone else's advertising: the
+    // section runs to the next heading of the same rank or higher.
+    SPONSOR_HEADING: /\b(supportat[oa] da|sponsorizzat[oa] da|offert[oa] da|in collaborazione con|sponsored by|brought to you by|presented by|in partnership with)\b/i,
+
+    // A player's own line, "Ascolta questo episodio grazie a ElevenLabs".
+    PLAYER_LINE: /\b(ascolta|listen)\b/i,
+
+    // The elements whose text the rules read and which they remove whole. Whole
+    // elements only: a body cut in the middle of a <div> is not XML any more,
+    // and the X3 stops turning pages at the first error in the file.
+    BLOCK: /<(p|h[1-6]|li|figure|blockquote|pre|table)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,
+
+    // The text of a piece of HTML, as the rules expect to read it.
+    textOf(html) {
+        return String(html || '')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/&nbsp;|&#160;/gi, ' ')
+            .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+            .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
+            .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
+            .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+            .replace(/\s+/g, ' ')
+            .trim();
+    },
+
+    /* The Readability road: the same furniture, taken off HTML.
+       - players: an <audio> or <video> (with the text it shows when it cannot
+         play) is nothing on an e-reader, and a short line presenting it goes
+         with it;
+       - labels: CHROME_LINES, on short blocks;
+       - sponsor: a section under a SPONSOR_HEADING;
+       - tail: from an END_MARKERS block past TAIL_POSITION of the text, every
+         block to the end.
+       @returns {{body: string, dropped: Array<{text: string, rule: string}>}} */
+    stripMarkup(body) {
+        let html = String(body || '');
+        const dropped = [];
+
+        // Players first, so their fallback text weighs nothing below.
+        // Where each player was, in the body once players are out of it.
+        const playerAt = [];
+        let removed = 0;
+        html = html.replace(/<(audio|video)\b[^>]*>[\s\S]*?<\/\1\s*>|<(audio|video)\b[^>]*\/>/gi, (player, _a, _b, offset) => {
+            dropped.push({ text: this.textOf(player), rule: 'player' });
+            playerAt.push(offset - removed);
+            removed += player.length;
+            return '';
+        });
+
+        const blocks = [...html.matchAll(this.BLOCK)].map(match => ({
+            start: match.index,
+            end: match.index + match[0].length,
+            tag: match[1].toLowerCase(),
+            // An element holding one of its own kind was matched to the inner
+            // closing tag: removing it would leave a stray one behind.
+            whole: !new RegExp(`<${match[1]}\\b`, 'i').test(match[0].slice(1)),
+            text: this.textOf(match[0])
+        }));
+        const remove = new Set();
+        const drop = (index, rule) => {
+            if (!blocks[index].whole || remove.has(index)) return;
+            remove.add(index);
+            if (blocks[index].text) dropped.push({ text: blocks[index].text, rule });
+        };
+
+        // The line presenting a player: the nearest block before where it was.
+        for (const at of playerAt) {
+            let previous = -1;
+            blocks.forEach((block, index) => { if (block.end <= at && block.text) previous = index; });
+            const line = blocks[previous];
+            if (line && line.text.length <= this.LABEL_LENGTH * 2 && this.PLAYER_LINE.test(line.text)) {
+                drop(previous, 'player');
+            }
+        }
+
+        blocks.forEach((block, index) => {
+            if (block.text && this.isChromeLine(block.text)) drop(index, 'chrome');
+        });
+
+        blocks.forEach((block, index) => {
+            const rank = /^h([1-6])$/.exec(block.tag);
+            if (!rank || !this.SPONSOR_HEADING.test(block.text)) return;
+            for (let i = index; i < blocks.length; i++) {
+                const next = /^h([1-6])$/.exec(blocks[i].tag);
+                if (i > index && next && Number(next[1]) <= Number(rank[1])) break;
+                drop(i, 'sponsor');
+            }
+        });
+
+        const total = blocks.reduce((sum, block) => sum + block.text.length, 0);
+        let seen = 0;
+        for (let i = 0; i < blocks.length; i++) {
+            const isMarker = this.END_MARKERS.some(marker => marker.test(blocks[i].text));
+            if (isMarker && seen >= total * this.TAIL_POSITION) {
+                for (let j = i; j < blocks.length; j++) drop(j, 'tail');
+                break;
+            }
+            seen += blocks[i].text.length;
+        }
+
+        // From the back, so the positions still to use stay right.
+        [...remove].sort((a, b) => b - a).forEach(index => {
+            html = html.slice(0, blocks[index].start) + html.slice(blocks[index].end);
+        });
+        // A paragraph that only held a player is left empty.
+        html = html.replace(/<p\b[^>]*>\s*<\/p\s*>/gi, '');
+        return { body: html, dropped };
     },
 
     cutTail(paragraphs, drop) {
