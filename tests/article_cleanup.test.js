@@ -270,3 +270,26 @@ describe('ArticleCleanup.stripMarkup', () => {
         assert.deepEqual(ArticleCleanup.stripMarkup(article), { body: article, dropped: [] });
     });
 });
+
+describe('ArticleCleanup.stripMarkup, the line of a player already gone', () => {
+    const prose = '<p>' + 'Wave, quello che una volta si chiamava Italian Tech Week, è la conferenza più influente. '.repeat(3) + '</p>';
+
+    it('drops "Ascolta questo episodio" before the article, as Safari leaves it', () => {
+        const { body, dropped } = ArticleCleanup.stripMarkup(`<p>Ascolta questo episodio grazie a ElevenLabs</p><h5>La storia della settimana</h5>${prose}`);
+        assert.equal(body, `<h5>La storia della settimana</h5>${prose}`);
+        assert.deepEqual(dropped.map(d => d.rule), ['player']);
+    });
+
+    it('drops the Corriere\'s "Ascolta l\'articolo" too, with either apostrophe', () => {
+        // As the Corriere lays it out: a dek long enough to be prose comes first.
+        const dek = '<p>' + 'Dalla nascita di ChatGPT agli agenti di intelligenza artificiale. '.repeat(4) + '</p>';
+        const { body } = ArticleCleanup.stripMarkup(
+            `<p>di Riccardo Luna</p>${dek}<p>Ascolta l'articolo</p><p>36 min</p><p>Ascolta l’articolo</p>${prose.repeat(12)}`);
+        assert.equal(body, `<p>di Riccardo Luna</p>${dek}${prose.repeat(12)}`);
+    });
+
+    it('keeps the same words once the article has started', () => {
+        const late = '<p>Ascolta questo episodio con calma, merita.</p>';
+        assert.equal(ArticleCleanup.stripMarkup(`${prose}${late}`).body, `${prose}${late}`);
+    });
+});

@@ -7,6 +7,9 @@
 if (typeof globalThis.NewsletterNames === 'undefined' && typeof require !== 'undefined') {
     globalThis.NewsletterNames = require('./newsletter_names.js');
 }
+if (typeof globalThis.ArticleCleanup === 'undefined' && typeof require !== 'undefined') {
+    globalThis.ArticleCleanup = require('./article_cleanup.js');
+}
 
 const HtmlArticle = {
     EXTENSIONS: ['.html', '.htm'],
@@ -182,7 +185,10 @@ const HtmlArticle = {
             campaign: NewsletterNames.findMarker(options.filename, html),
             author: '',
             date: options.date || new Date().toISOString().split('T')[0],
-            body: this.placeCharts(body.trim(), taken.charts),
+            // Safari's reader drops most of a page's furniture, not a
+            // newsletter's sponsor section or its closing: the same cleanup as
+            // the extension's Readability road, before the charts go back in.
+            body: this.placeCharts(ArticleCleanup.stripMarkup(body.trim()).body, taken.charts),
             sourceUrl: this.findSourceUrl(source)
         };
     }

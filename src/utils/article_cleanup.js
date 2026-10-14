@@ -154,6 +154,11 @@ const ArticleCleanup = {
 
     // A player's own line, "Ascolta questo episodio grazie a ElevenLabs".
     PLAYER_LINE: /\b(ascolta|listen)\b/i,
+    // The same line once the reader dropped the player itself, as Safari's does:
+    // recognised by its wording alone, and only before the article starts.
+    // "Ascolta questo episodio…" on Substack, "Ascolta l'articolo" on the Corriere.
+    PLAYER_LINE_POSITION: 0.15,
+    ORPHAN_PLAYER_LINE: /^(ascolta|listen to) (questo |quest['’]|l['’]|this |the )?(episodio|episode|articolo|article|post|podcast)\b/i,
 
     // The elements whose text the rules read and which they remove whole. Whole
     // elements only: a body cut in the middle of a <div> is not XML any more,
@@ -222,6 +227,20 @@ const ArticleCleanup = {
                 drop(previous, 'player');
             }
         }
+
+        // Near the top only: a dek long enough to count as prose may come first.
+        const allText = blocks.reduce((sum, block) => sum + block.text.length, 0);
+        let above = 0;
+        blocks.forEach((block, index) => {
+            if (above <= allText * this.PLAYER_LINE_POSITION && block.text.length <= this.LABEL_LENGTH * 2 &&
+                this.ORPHAN_PLAYER_LINE.test(block.text)) {
+                drop(index, 'player');
+                // Its running time, "36 min", sits right under it.
+                const next = blocks[index + 1];
+                if (next && /^\d+\s*min(uti|utes)?$/i.test(next.text)) drop(index + 1, 'player');
+            }
+            above += block.text.length;
+        });
 
         blocks.forEach((block, index) => {
             if (block.text && this.isChromeLine(block.text)) drop(index, 'chrome');

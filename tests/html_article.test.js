@@ -312,3 +312,16 @@ ${charts.join('\n')}`;
         assert.ok(!/<figure/.test(article.body));
     });
 });
+
+describe('HtmlArticle.parse cleans what Safari\'s reader keeps', () => {
+    it('drops a newsletter\'s sponsor section and closing, keeps the rest', () => {
+        const prose = (n) => `<p>${'Testo vero della newsletter, abbastanza lungo da essere prosa. '.repeat(4)}${n}</p>`;
+        const html = '<h1>Le startup europee</h1><!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' +
+            `${prose(1)}${prose(2)}${prose(3)}<h5>Questo episodio è supportato da Wave</h5><p>Acquista il tuo pass</p>` +
+            `<h5>Il toolkit di Technicismi</h5>${prose(4)}<h5>Info</h5><p>Condividi</p><p>Lascia un commento</p></body></html>`;
+        const { body } = require('../src/utils/html_article.js').parse(html, { filename: 'Le startup europee.html' });
+        assert.equal(/supportato|pass|Info|Condividi|commento/.test(body), false);
+        assert.ok(body.includes('<h5>Il toolkit di Technicismi</h5>'));
+        assert.ok(body.endsWith(prose(4)));
+    });
+});
