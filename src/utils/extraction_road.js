@@ -15,9 +15,13 @@ const ExtractionRoad = {
         if (article.extraction !== 'fallback') return '';
 
         const parts = ['Read by the fallback'];
-        parts.push(article.readabilityLoaded === false
-            ? 'Readability did not load'
-            : `Readability found ${count(article.readabilityLength)}`);
+        if (article.readabilityLoaded === false) {
+            parts.push(article.readabilityInjectError
+                ? `Readability did not load: ${article.readabilityInjectError}`
+                : 'Readability did not load');
+        } else {
+            parts.push(`Readability found ${count(article.readabilityLength)}`);
+        }
         // Worth naming only when it is an article's worth of text.
         if (article.hiddenLength >= 1000) {
             parts.push(`${count(article.hiddenLength)} marked hidden on the page`);

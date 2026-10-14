@@ -33,9 +33,12 @@ export class ArticleManager {
 
             console.log('[Article Manager] Checking tab:', tab.url);
 
-            // Readability reaches the page only here now: the manifest no longer
-            // declares it as a content script, since this ran on every popup
-            // open anyway and the declared copy was loaded into every page.
+            // Readability is declared as a content script, and injected here as
+            // well for tabs opened before the extension was installed or
+            // updated. The declaration is the road that works on Firefox for
+            // Android: from 24/08 to 1.7.3 this injection stood alone there, and
+            // every article on the phone went through the fallback.
+            let injectFailure = null;
             try {
                 await browserAPI.scripting.executeScript({
                     target: { tabId: tab.id },
@@ -46,6 +49,7 @@ export class ArticleManager {
                 // Extraction still runs and falls back to its own heuristics,
                 // but the result is worse, so this is worth shouting about.
                 console.error('[Article Manager] Could not inject Readability:', injectError.message);
+                injectFailure = injectError.message || String(injectError);
             }
 
             // Now execute extraction logic
@@ -58,6 +62,10 @@ export class ArticleManager {
             console.log('[Article Manager] Extraction result:', result);
 
             if (result && result.success) {
+                // Said in the popup when Readability is missing from the page:
+                // there is no console on the phone to read it from.
+                result.article.readabilityInjectError = injectFailure ||
+                    'injected without error, yet not found by the extraction';
                 this.articleData = this.finishArticle(result.article);
                 this.lastFailureDetail = null;
                 // Pictures take a download each: the article is shown now, and

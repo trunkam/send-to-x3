@@ -22,6 +22,11 @@ describe('ExtractionRoad.describe', () => {
             'Read by the fallback · Readability found 0 characters');
     });
 
+    it('carries the reason the injection gave, when it gave one', () => {
+        assert.equal(ExtractionRoad.describe({ extraction: 'fallback', readabilityLoaded: false, readabilityInjectError: 'Missing host permission for the tab' }),
+            'Read by the fallback · Readability did not load: Missing host permission for the tab');
+    });
+
     it('mentions hidden text only when it is an article’s worth', () => {
         assert.equal(ExtractionRoad.describe({ extraction: 'fallback', readabilityLoaded: true, readabilityLength: 40, hiddenLength: 17000 }),
             `Read by the fallback · Readability found 40 characters · ${n(17000)} characters marked hidden on the page`);
