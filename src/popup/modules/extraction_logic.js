@@ -310,6 +310,9 @@ export async function extractArticle() {
         // Kept so a failure can say how far each stage got: the popup has no
         // console on Android, so the reason has to travel back with the result.
         let readabilityLength = null;
+        // What the page says it is written in, for the EPUB's language.
+        const language = document.documentElement.getAttribute('lang') ||
+            document.querySelector('meta[http-equiv="content-language" i]')?.content || '';
 
         if (hasReadability) {
             // Use Readability
@@ -364,7 +367,9 @@ export async function extractArticle() {
                         // Which road the article took, so the popup can say it.
                         // On Android there is no console to ask afterwards.
                         extraction: 'readability',
+                        readabilityLoaded: true,
                         readabilityLength,
+                        language,
                         body,
                         charts,
                         chartsFailed,
@@ -454,6 +459,15 @@ export async function extractArticle() {
             };
         }
 
+        // Readability skips whatever the page marks as hidden, and a site that
+        // opens a sheet over the article ("get the app") may mark the article
+        // so. Reading the page as text, the fallback does not notice: how much
+        // text sits under such a mark is what tells the two cases apart.
+        const hiddenMark = '[aria-hidden="true"], [hidden]';
+        const hiddenLength = [...document.querySelectorAll(hiddenMark)]
+            .filter(el => !el.parentElement?.closest(hiddenMark))
+            .reduce((sum, el) => sum + (el.textContent || '').length, 0);
+
         // Get metadata
         author = document.querySelector('meta[name="author"]')?.content ||
             document.querySelector('meta[property="article:author"]')?.content ||
@@ -486,7 +500,10 @@ export async function extractArticle() {
                 date,
                 wordCount,
                 extraction: 'fallback',
+                readabilityLoaded: hasReadability,
                 readabilityLength,
+                hiddenLength,
+                language,
                 bodyParagraphs: paragraphs,
                 charts,
                 chartsFailed,

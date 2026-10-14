@@ -20,10 +20,10 @@ const EpubTemplates = {
 
   /**
    * Generate content.opf
-   * @param {Object} metadata - { title, author, date, uuid, coverMediaType }
+   * @param {Object} metadata - { title, author, date, uuid, coverMediaType, images, language }
    */
   contentOpf(metadata) {
-    const { title, author, date, uuid, coverMediaType, images = [] } = metadata;
+    const { title, author, date, uuid, coverMediaType, images = [], language = 'en' } = metadata;
     const creatorLine = author
       ? `    <dc:creator>${this.escapeXml(author)}</dc:creator>`
       : '';
@@ -48,7 +48,7 @@ ${creatorLine}
 ${dateLine}
 ${coverMeta}
     <dc:identifier id="bookid">urn:uuid:${uuid}</dc:identifier>
-    <dc:language>en</dc:language>
+    <dc:language>${this.escapeXml(language)}</dc:language>
   </metadata>
   <manifest>
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
@@ -93,10 +93,10 @@ ${images.map(image => `    <item id="${image.id}" href="${image.href}" media-typ
 
   /**
    * Generate content.xhtml for longpost
-   * @param {Object} data - { title, author, date, body, url }
+   * @param {Object} data - { title, author, date, body, url, language }
    */
   contentXhtml(data) {
-    const { title, author, date, body, url } = data;
+    const { title, author, date, body, url, language = 'en' } = data;
 
     // Build metadata line: @handle • date • Source: url
     const metaParts = [];
@@ -112,7 +112,7 @@ ${images.map(image => `    <item id="${image.id}" href="${image.href}" media-typ
 
     return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="${this.escapeXml(language)}">
 <head>
   <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8"/>
   <title>${this.escapeXml(title)}</title>

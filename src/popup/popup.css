@@ -148,6 +148,13 @@ body {
     color: #3f3f46;
 }
 
+/* Which road the extraction took: tucked under the author line. */
+.article-road {
+    margin: -10px 0 16px;
+    font-size: 11px;
+    color: #71717a;
+}
+
 /* Button Group */
 .button-group {
     display: flex;

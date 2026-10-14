@@ -77,13 +77,19 @@ const EpubBuilder = {
         */
 
         const pictures = this.pictureFiles(article, variant);
+        // Declared by the page when it came through the extension; the iPad's
+        // HTML declares nothing, and there the text has to say it.
+        const language = globalThis.ArticleLanguage
+            ? ArticleLanguage.pick(article.language, article.rawText || String(article.body || '').replace(/<[^>]+>/g, ' '))
+            : 'en';
         const metadata = {
             title: article.title,
             author: article.author,
             date: article.date,
             uuid: uuid,
             coverMediaType,
-            images: pictures
+            images: pictures,
+            language
         };
 
         // Add mimetype file (must be first and uncompressed)
@@ -99,7 +105,13 @@ const EpubBuilder = {
         zip.file('OEBPS/toc.ncx', EpubTemplates.tocNcx(metadata));
 
         // Add content.xhtml (pass full article including url)
-        zip.file('OEBPS/content.xhtml', EpubTemplates.contentXhtml({ ...article, body: this.resolvePictures(article.body, pictures) }));
+        zip.file('OEBPS/content.xhtml', EpubTemplates.contentXhtml({
+            ...article,
+            // Every extraction road names it sourceUrl; the template reads url.
+            url: article.url || article.sourceUrl,
+            language,
+            body: this.resolvePictures(article.body, pictures)
+        }));
         for (const picture of pictures) {
             zip.file(`OEBPS/${picture.href}`, picture.base64, { base64: true });
         }

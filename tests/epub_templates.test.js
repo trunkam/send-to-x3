@@ -78,4 +78,16 @@ describe('EpubTemplates.contentXhtml', () => {
     it('holds no bare ampersand anywhere - body, metadata or source link', () => {
         assert.equal(BARE_AMPERSAND.test(page), false);
     });
+
+    it('declares the language it is given, English when given none', () => {
+        assert.match(page, /xml:lang="en"/);
+        assert.match(EpubTemplates.contentXhtml({ title: 't', body: '<p>x</p>', language: 'it' }), /xml:lang="it"/);
+    });
+});
+
+describe('EpubTemplates.contentOpf', () => {
+    it('declares the language it is given, English when given none', () => {
+        assert.match(EpubTemplates.contentOpf({ title: 't', uuid: 'u' }), /<dc:language>en<\/dc:language>/);
+        assert.match(EpubTemplates.contentOpf({ title: 't', uuid: 'u', language: 'it' }), /<dc:language>it<\/dc:language>/);
+    });
 });

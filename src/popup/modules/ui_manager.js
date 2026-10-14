@@ -20,6 +20,7 @@ export class UIManager {
             articleTitle: document.getElementById('article-title'),
             articleAuthor: document.getElementById('article-author'),
             articleWords: document.getElementById('article-words'),
+            articleRoad: document.getElementById('article-road'),
             errorMessage: document.getElementById('error-message'),
             articleStatus: document.getElementById('article-status'),
             articleImages: document.getElementById('article-images'),
@@ -222,6 +223,9 @@ export class UIManager {
         this.elements.articleTitle.textContent = article.title;
         this.elements.articleAuthor.textContent = article.author;
         this.elements.articleWords.textContent = `${article.wordCount?.toLocaleString() || '—'} words`;
+        const road = globalThis.ExtractionRoad ? ExtractionRoad.describe(article) : '';
+        this.elements.articleRoad.textContent = road;
+        this.elements.articleRoad.classList.toggle('hidden', !road);
         this.setArticleStatus('');
     }
 

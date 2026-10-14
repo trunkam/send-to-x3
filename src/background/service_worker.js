@@ -13,6 +13,7 @@ if (typeof importScripts === 'function') {
             '../utils/sanitize.js',
             '../utils/transfer_utils.js',
             '../utils/folder_path.js',
+            '../utils/article_language.js',
             '../epub/epub_templates.js',
             '../epub/epub_builder.js',
             '../pdf/pdf_builder.js',
