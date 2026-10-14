@@ -221,3 +221,11 @@ describe('ArticleImages.placeMissingCharts', () => {
         assert.equal(ArticleImages.placeMissingCharts({ body }), body);
     });
 });
+
+describe('ArticleImages.resolveSource, a picture the page showed as a background', () => {
+    it('downloads it from its address, as a chart', () => {
+        const article = { charts: [{ src: 'https://images.wsj.net/im-54790532?width=300&height=375&size=0.8', alt: '' }] };
+        assert.deepEqual(ArticleImages.resolveSource(article, { src: 'x3-chart:0', alt: '' }),
+            { src: 'https://images.wsj.net/im-54790532?width=300&height=375&size=0.8', alt: '', chart: true });
+    });
+});

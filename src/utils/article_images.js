@@ -307,7 +307,9 @@ const ArticleImages = {
         const chart = /^x3-chart:(\d+)$/.exec(image.src);
         if (chart) {
             const made = (article.charts || [])[Number(chart[1])];
-            return made ? { src: made.dataUrl, alt: image.alt || made.alt || '', chart: true } : null;
+            // A drawing made into a PNG in the page, or the address of a
+            // picture the page showed as a background.
+            return made ? { src: made.dataUrl || made.src, alt: image.alt || made.alt || '', chart: true } : null;
         }
         const marked = /^x3-image:(\d+)$/.exec(image.src);
         if (marked) {

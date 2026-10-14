@@ -296,6 +296,31 @@ export async function extractArticle() {
                     console.warn('[X4] Chart not captured:', error.message);
                 }
             }
+
+            // A picture shown as the background of an empty box. On the
+            // phone the WSJ does not draw its charts: it shows a ready-made
+            // PNG as the CSS background of an empty <div> ("chartsFacade"),
+            // which is neither an <svg> nor an <img>. Measured on the 14/10
+            // page in Firefox for Android, the only other background picture
+            // was the masthead logo, inside a link and outside the article -
+            // so: empty, chart-sized, inside the article, not in the page's
+            // furniture. The address is kept as it is; the popup downloads it.
+            const articleArea = document.querySelector('article, main, [role="main"]') || document.body;
+            for (const box of articleArea.querySelectorAll('*')) {
+                if (charts.length >= 15) break;
+                if (box.children.length || box.textContent.trim()) continue;
+                if (box.closest('nav, header, footer, aside, button, a, [data-x3-chart]')) continue;
+                const area = box.getBoundingClientRect();
+                if (area.width < 250 || area.height < 150) continue;
+                const picture = /url\(["']?(https?:[^"')]+)["']?\)/.exec(getComputedStyle(box).backgroundImage || '');
+                if (!picture) continue;
+                box.setAttribute('data-x3-chart', String(charts.length));
+                charts.push({
+                    src: picture[1],
+                    alt: (box.getAttribute('aria-label') || box.getAttribute('title') || '').trim(),
+                    ...surroundings(box)
+                });
+            }
         } catch (error) {
             console.warn('[X4] Chart search failed:', error.message);
         }
