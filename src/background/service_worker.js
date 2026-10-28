@@ -15,6 +15,7 @@ if (typeof importScripts === 'function') {
             '../utils/folder_path.js',
             '../utils/article_language.js',
             '../epub/epub_templates.js',
+            '../epub/kindle_cover.js',
             '../epub/epub_builder.js',
             '../pdf/pdf_builder.js',
             '../upload/x4_upload_tab.js',

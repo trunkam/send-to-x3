@@ -20,12 +20,18 @@ const EpubTemplates = {
 
   /**
    * Generate content.opf
-   * @param {Object} metadata - { title, author, date, uuid, coverMediaType, images, language }
+   * @param {Object} metadata - { title, author, date, uuid, coverMediaType, images, language, series }
    */
   contentOpf(metadata) {
-    const { title, author, date, uuid, coverMediaType, images = [], language = 'en' } = metadata;
+    const { title, author, date, uuid, coverMediaType, images = [], language = 'en', series } = metadata;
     const creatorLine = author
       ? `    <dc:creator>${this.escapeXml(author)}</dc:creator>`
+      : '';
+    // Calibre's form, which KOReader reads: a library that groups by series
+    // (SimpleUI) then shows the articles as one entry instead of one book per
+    // byline.
+    const seriesLine = series
+      ? `    <meta name="calibre:series" content="${this.escapeXml(series)}" />`
       : '';
     const dateLine = date
       ? `    <dc:date>${this.escapeXml(date)}</dc:date>`
@@ -46,6 +52,7 @@ const EpubTemplates = {
     <dc:title>${this.escapeXml(title)}</dc:title>
 ${creatorLine}
 ${dateLine}
+${seriesLine}
 ${coverMeta}
     <dc:identifier id="bookid">urn:uuid:${uuid}</dc:identifier>
     <dc:language>${this.escapeXml(language)}</dc:language>

@@ -376,6 +376,27 @@ export async function extractArticle() {
         // Kept so a failure can say how far each stage got: the popup has no
         // console on Android, so the reason has to travel back with the result.
         let readabilityLength = null;
+        // The masthead the page declares, for the Kindle copy's cover.
+        let publication = document.querySelector('meta[property="og:site_name"]')?.content?.trim() || '';
+        // substack.com/home/post, where the app opens an issue, declares only
+        // "Substack". It links the issue's own address, by its title, and the
+        // newsletter's home, by its name: the other newsletters linked there
+        // are recommendations, and only the title tells them apart.
+        if (!publication && window.location.hostname === 'substack.com') {
+            const norm = s => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const ogTitle = norm(document.querySelector('meta[property="og:title"]')?.content);
+            const own = ogTitle && [...document.querySelectorAll('a[href*=".substack.com/p/"]')].find(a => {
+                const text = norm(a.textContent);
+                return text.length >= 15 && (ogTitle.startsWith(text.slice(0, 40)) || text.startsWith(ogTitle.slice(0, 40)));
+            });
+            if (own) {
+                const home = new URL(own.href).origin;
+                publication = [...document.querySelectorAll('a[href]')]
+                    .filter(a => a.href.replace(/\/$/, '') === home)
+                    .map(a => a.textContent.trim())
+                    .find(text => text && text.length <= 60) || '';
+            }
+        }
         // What the page says it is written in, for the EPUB's language.
         const language = document.documentElement.getAttribute('lang') ||
             document.querySelector('meta[http-equiv="content-language" i]')?.content || '';
@@ -437,6 +458,7 @@ export async function extractArticle() {
                         readabilityLength,
                         drawings,
                         language,
+                        publication: article.siteName || publication,
                         body,
                         charts,
                         chartsFailed,
@@ -572,6 +594,7 @@ export async function extractArticle() {
                 hiddenLength,
                 drawings,
                 language,
+                publication,
                 bodyParagraphs: paragraphs,
                 charts,
                 chartsFailed,

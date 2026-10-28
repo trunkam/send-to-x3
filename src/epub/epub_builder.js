@@ -75,6 +75,19 @@ const EpubBuilder = {
             }
         }
         */
+        // The Kindle's copy gets a drawn cover (see KindleCover). A failure
+        // costs the cover, never the copy.
+        if (variant === 'kindle' && globalThis.KindleCover) {
+            try {
+                const cover = await KindleCover.draw(article);
+                if (cover) {
+                    coverMediaType = 'image/jpeg';
+                    zip.file('OEBPS/images/cover.jpg', cover);
+                }
+            } catch (e) {
+                console.warn('[EpubBuilder] Cover not drawn:', e);
+            }
+        }
 
         const pictures = this.pictureFiles(article, variant);
         // Declared by the page when it came through the extension; the iPad's
@@ -89,7 +102,8 @@ const EpubBuilder = {
             uuid: uuid,
             coverMediaType,
             images: pictures,
-            language
+            language,
+            series: 'Articoli'
         };
 
         // Add mimetype file (must be first and uncompressed)

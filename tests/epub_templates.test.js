@@ -90,4 +90,12 @@ describe('EpubTemplates.contentOpf', () => {
         assert.match(EpubTemplates.contentOpf({ title: 't', uuid: 'u' }), /<dc:language>en<\/dc:language>/);
         assert.match(EpubTemplates.contentOpf({ title: 't', uuid: 'u', language: 'it' }), /<dc:language>it<\/dc:language>/);
     });
+
+    it('names the series the way KOReader reads it, and only when given one', () => {
+        assert.match(
+            EpubTemplates.contentOpf({ title: 't', uuid: 'u', series: 'Articoli' }),
+            /<meta name="calibre:series" content="Articoli" \/>/
+        );
+        assert.doesNotMatch(EpubTemplates.contentOpf({ title: 't', uuid: 'u' }), /calibre:series/);
+    });
 });
