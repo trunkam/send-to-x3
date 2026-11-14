@@ -212,7 +212,22 @@ ${images.map(image => `    <item id="${image.id}" href="${image.href}" media-typ
 
     // Replace with self-closing version
     // Also ensures we don't double-close if the regex is too greedy, but (?<!/) handles the check.
-    return this.xmlSafeEntities(html.replace(pattern, '<$1$2 />'));
+    return this.xmlSafeEntities(this.stripComments(html).replace(pattern, '<$1$2 />'));
+  },
+
+  /**
+   * HTML comments go, all of them. HTML forgives what XML does not: the
+   * Corriere's pages carry hundreds of <!--wf-container--->, and in XML a
+   * comment may neither hold "--" nor end in "--->". One of those and the X3
+   * stops with an indexing error before showing a single page. Nothing in a
+   * comment is meant to be read, so there is nothing to lose by dropping them,
+   * Outlook's <!--[if mso]> blocks included. A comment left open runs to the
+   * end, as it does in a browser.
+   *
+   * @param {string} html
+   */
+  stripComments(html) {
+    return String(html).replace(/<!--[\s\S]*?(?:-->|$)/g, '');
   },
 
   /**

@@ -57,6 +57,12 @@ const EpubBuilder = {
         const zip = new JSZip();
         const uuid = this.generateUuid();
 
+        // The mimetype file must be the first entry in the archive, and stored
+        // uncompressed. JSZip writes entries in the order they are added, so it
+        // goes in before anything else: the cover used to come first, and with
+        // it the OEBPS/ folder entries.
+        zip.file('mimetype', EpubTemplates.mimetype, { compression: 'STORE' });
+
         let coverMediaType = null;
         /*
         // Cover disabled for X4 compatibility
@@ -106,8 +112,6 @@ const EpubBuilder = {
             series: 'Articoli'
         };
 
-        // Add mimetype file (must be first and uncompressed)
-        zip.file('mimetype', EpubTemplates.mimetype, { compression: 'STORE' });
 
         // Add container.xml in META-INF
         zip.file('META-INF/container.xml', EpubTemplates.containerXml);

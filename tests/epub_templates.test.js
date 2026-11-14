@@ -59,6 +59,26 @@ describe('EpubTemplates.htmlToXhtml', () => {
     });
 });
 
+describe('EpubTemplates.stripComments', () => {
+    it('drops the Corriere\'s comments, which XML refuses', () => {
+        const body = '<p>a</p><!--wf-container---><!--wf-container---></div>';
+        assert.equal(EpubTemplates.htmlToXhtml(body), '<p>a</p></div>');
+    });
+
+    it('drops a comment holding "--" and Outlook\'s conditional blocks', () => {
+        assert.equal(EpubTemplates.stripComments('a<!-- x -- y -->b'), 'ab');
+        assert.equal(EpubTemplates.stripComments('a<!--[if mso]><table><![endif]-->b'), 'ab');
+    });
+
+    it('treats a comment left open as running to the end', () => {
+        assert.equal(EpubTemplates.stripComments('<p>a</p><!-- never closed <p>b</p>'), '<p>a</p>');
+    });
+
+    it('leaves text without comments as it is', () => {
+        assert.equal(EpubTemplates.stripComments('<p>a -- b -> c</p>'), '<p>a -- b -> c</p>');
+    });
+});
+
 describe('EpubTemplates.contentXhtml', () => {
     // The article as the fallback extraction hands it over: the copyright line
     // is the one that used to end the reading session mid-page.
