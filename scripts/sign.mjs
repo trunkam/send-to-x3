@@ -79,6 +79,22 @@ function newestXpi() {
     return files.length ? path.join(dir, files[0].name) : null;
 }
 
+// The phone installs the .xpi by opening it from a synced folder, and the
+// working copy need not be one. XPI_COPY_DIR in .env names a folder that is;
+// left unset, the .xpi stays only in web-ext-artifacts/. A failed copy costs
+// the copy, never the signed file.
+function copyForThePhone(xpi, dir) {
+    if (!dir) return;
+    try {
+        fs.mkdirSync(dir, { recursive: true });
+        const target = path.join(dir, path.basename(xpi));
+        fs.copyFileSync(xpi, target);
+        console.log(`Copied for the phone: ${target}`);
+    } catch (e) {
+        console.warn(`Not copied to ${dir}: ${e.message}`);
+    }
+}
+
 // --dry-run builds and injects but signs nothing, and leaves build/ to look at.
 const dryRun = process.argv.includes('--dry-run');
 
@@ -123,6 +139,7 @@ if (signed && signed !== before) {
         fs.renameSync(signed, wanted);
         console.log(`Signed: ${path.relative(root, wanted)}`);
     }
+    copyForThePhone(wanted, env.XPI_COPY_DIR);
 } else {
     console.log('No new .xpi appeared — check the output above.');
 }
